@@ -1,0 +1,4 @@
+we're creating "bud", a Spore-like AI plant companion game/simulation/chatbot
+- minimal concise lowercase monospaced UI
+- vite/react + three.js frontend, nodejs/express backend, mongodb database, openai LLM
+- the player will be able to cultivate multiple buds, each with unique personalities determined by the parts used in their construction (thorns vs flowers, etc) and their conversation with the player
