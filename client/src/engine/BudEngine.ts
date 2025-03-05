@@ -1,6 +1,12 @@
 import * as THREE from 'three'
 // @ts-ignore
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls'
+// @ts-ignore
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer'
+// @ts-ignore
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass'
+// @ts-ignore
+import { OutlinePass } from 'three/examples/jsm/postprocessing/OutlinePass'
 import { InputManager } from './InputManager'
 
 export type PartType = 'stem' | 'leaf' | 'thorn' | 'flower'
@@ -29,6 +35,9 @@ type PartPreview = {
   selected: boolean
 }
 
+type EventCallback = (data: any) => void
+type EventType = 'select' | 'deselect'
+
 export class BudEngine {
   private bones: Map<string, Bone> = new Map()
   private boneMeshes: Map<string, THREE.Mesh> = new Map()
@@ -52,11 +61,21 @@ export class BudEngine {
   private mainDirt?: THREE.Mesh
   private plantingArea: THREE.Vector3 = new THREE.Vector3(0, 0.4, 0)
   private plantingRadius: number = 0.5
+  private eventListeners: Map<EventType, Set<EventCallback>> = new Map()
+  private selectedBoneId?: string
+  private composer: EffectComposer
+  private outlinePass: OutlinePass
+  private dragOffset: THREE.Vector3 = new THREE.Vector3()
+  private dragPlane: THREE.Plane = new THREE.Plane()
+  private dragPlaneHelper: THREE.Vector3 = new THREE.Vector3()
+  private gridHelper: THREE.GridHelper
+  private groundPlane: THREE.Mesh
+  private mouseDown = false
   
   constructor(container: HTMLElement) {
     // Main scene setup
     this.scene = new THREE.Scene()
-    this.scene.background = new THREE.Color('#111111')
+    this.scene.background = new THREE.Color('#eeebe6')
     
     // UI scene setup
     this.uiScene = new THREE.Scene()
@@ -64,7 +83,7 @@ export class BudEngine {
     // Camera setup
     const aspect = container.clientWidth / container.clientHeight
     this.camera = new THREE.PerspectiveCamera(75, aspect, 0.1, 1000)
-    this.camera.position.set(3, 3, 3)
+    this.camera.position.set(1.5, 2, -.4)
     this.camera.lookAt(0, 0, 0)
     
     // UI camera (orthographic for 2D panel)
@@ -80,11 +99,14 @@ export class BudEngine {
     // Renderer setup
     this.renderer = new THREE.WebGLRenderer({ 
       antialias: true,
-      alpha: true 
+      alpha: true,
+      depth: true // Enable depth buffer
     })
     this.renderer.setPixelRatio(window.devicePixelRatio)
     this.renderer.setSize(container.clientWidth, container.clientHeight)
-    this.renderer.autoClear = false // Important for rendering two scenes
+    this.renderer.setClearColor('#eeebe6', 1)
+    this.renderer.autoClear = true
+    this.renderer.sortObjects = true // Enable proper depth sorting
     container.appendChild(this.renderer.domElement)
     
     // Remove existing ground plane and add pot and dirt instead
@@ -94,19 +116,46 @@ export class BudEngine {
     this.renderer.shadowMap.enabled = true
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap
 
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6)
+    // Brighter ambient light
+    const ambientLight = new THREE.AmbientLight(0xffffff, 1.7)
     this.scene.add(ambientLight)
     
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8)
-    directionalLight.position.set(5, 5, 5)
+    // Brighter directional light with better position
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 2.2)
+    directionalLight.position.set(2, 4, 2)
     directionalLight.castShadow = true
-    directionalLight.shadow.mapSize.width = 1024
-    directionalLight.shadow.mapSize.height = 1024
+    directionalLight.shadow.mapSize.width = 2048
+    directionalLight.shadow.mapSize.height = 2048
+    directionalLight.shadow.camera.near = 0.1
+    directionalLight.shadow.camera.far = 20
+    directionalLight.shadow.camera.left = -5
+    directionalLight.shadow.camera.right = 5
+    directionalLight.shadow.camera.top = 5
+    directionalLight.shadow.camera.bottom = -5
+    directionalLight.shadow.bias = -0.001 // Reduce shadow artifacts
     this.scene.add(directionalLight)
+
+    // Add fill light from opposite side
+    const fillLight = new THREE.DirectionalLight(0xffffff, 0.5)
+    fillLight.position.set(-2, 2, -2)
+    this.scene.add(fillLight)
     
-    // Add grid helper
-    const gridHelper = new THREE.GridHelper(10, 10, 0x444444, 0x222222)
+    // Add grid helper with lighter colors
+    const gridHelper = new THREE.GridHelper(10, 10, '#888888', '#000000')
+    gridHelper.position.y = 0 // Ensure grid is at ground level
+    this.gridHelper = gridHelper
     this.scene.add(gridHelper)
+    
+    // Add invisible ground plane for better intersection
+    const groundGeo = new THREE.PlaneGeometry(10, 10)
+    const groundMat = new THREE.MeshBasicMaterial({ 
+      visible: false,
+      side: THREE.DoubleSide
+    })
+    this.groundPlane = new THREE.Mesh(groundGeo, groundMat)
+    this.groundPlane.rotation.x = -Math.PI / 2 // Rotate to be horizontal
+    this.groundPlane.position.y = 0
+    this.scene.add(this.groundPlane)
     
     // Event listeners
     this.renderer.domElement.addEventListener('mousedown', this.onMouseDown.bind(this))
@@ -122,6 +171,9 @@ export class BudEngine {
     this.controls.minDistance = 1
     this.controls.maxDistance = 10
     this.controls.maxPolarAngle = Math.PI / 2 // Don't allow camera below ground
+    this.controls.target.set(0, 0.4, 0) // Look at planting area
+    this.controls.update()
+
     this.controls.mouseButtons = {
       LEFT: THREE.MOUSE.ROTATE,
       MIDDLE: THREE.MOUSE.DOLLY,
@@ -131,29 +183,52 @@ export class BudEngine {
     // Initialize input manager
     this.inputManager = new InputManager(this.controls)
     
+    // Setup post-processing
+    this.composer = new EffectComposer(this.renderer)
+    const renderPass = new RenderPass(this.scene, this.camera)
+    this.composer.addPass(renderPass)
+    
+    // Setup outline pass with brighter outline
+    this.outlinePass = new OutlinePass(
+      new THREE.Vector2(container.clientWidth, container.clientHeight),
+      this.scene,
+      this.camera
+    )
+    this.outlinePass.visibleEdgeColor.set('#ffffff')
+    this.outlinePass.hiddenEdgeColor.set('#ffffff')
+    this.outlinePass.edgeStrength = 10
+    this.outlinePass.edgeThickness = 2
+    this.outlinePass.pulsePeriod = 0 // No pulsing
+    this.composer.addPass(this.outlinePass)
+
+    // Make sure we clear properly
+    this.renderer.autoClear = true
+    this.renderer.setClearColor('#eeebe6', 1)
+    
     // Start render loop
     this.animate()
   }
 
   private setupPotAndDirt() {
-    // Create main pot
+    // Create main pot with lighter material
     const potGeo = new THREE.CylinderGeometry(0.6, 0.4, 0.4, 32)
     const potMat = new THREE.MeshStandardMaterial({ 
-      color: '#654321',
-      roughness: 0.8,
-      metalness: 0.2
+      color: '#8B5E3C',
+      roughness: 0.6,
+      metalness: 0.1
     })
     this.mainPot = new THREE.Mesh(potGeo, potMat)
     this.mainPot.position.y = 0.2
     this.mainPot.castShadow = true
     this.mainPot.receiveShadow = true
+    this.mainPot.userData.isGround = true
     this.scene.add(this.mainPot)
 
-    // Create main dirt mound
+    // Create main dirt mound with lighter material
     const dirtGeo = new THREE.SphereGeometry(0.5, 32, 16)
     const dirtMat = new THREE.MeshStandardMaterial({
-      color: '#3a2a1a',
-      roughness: 1,
+      color: '#5C4033',
+      roughness: 0.8,
       metalness: 0
     })
     this.mainDirt = new THREE.Mesh(dirtGeo, dirtMat)
@@ -161,14 +236,15 @@ export class BudEngine {
     this.mainDirt.position.y = 0.35
     this.mainDirt.castShadow = true
     this.mainDirt.receiveShadow = true
+    this.mainDirt.userData.isGround = true
     this.scene.add(this.mainDirt)
 
     // Create ingredient pots in a semi-circle
     const parts: [PartType, string][] = [
-      ['stem', '#44aa44'],
-      ['leaf', '#66cc66'],
-      ['thorn', '#aa4444'],
-      ['flower', '#cc66cc']
+      ['stem', '#66cc66'],  // Brighter green
+      ['leaf', '#88ee88'],  // Even brighter green
+      ['thorn', '#cc6666'], // Brighter red
+      ['flower', '#ee88ee'] // Brighter purple
     ]
 
     const radius = 2 // Distance from center
@@ -176,7 +252,7 @@ export class BudEngine {
     const angleStep = Math.PI / 6 // 30 degrees between pots
 
     parts.forEach(([type, color], i) => {
-      const angle = startAngle + i * angleStep
+      const angle = startAngle + i * angleStep + Math.PI
       const x = Math.cos(angle) * radius
       const z = Math.sin(angle) * radius
 
@@ -231,7 +307,7 @@ export class BudEngine {
         geometry = new THREE.CylinderGeometry(0.03 * scale, 0.03 * scale, 0.2 * scale, 8)
         break
       case 'leaf':
-        geometry = new THREE.ConeGeometry(0.12 * scale, 0.2 * scale, 8)
+        geometry = new THREE.CircleGeometry(0.12 * scale, 16)
         break
       case 'thorn':
         geometry = new THREE.ConeGeometry(0.04 * scale, 0.15 * scale, 4)
@@ -244,107 +320,155 @@ export class BudEngine {
     const material = new THREE.MeshStandardMaterial({ 
       color,
       roughness: 0.7,
-      metalness: 0.2
+      metalness: 0.2,
+      side: type === 'leaf' ? THREE.DoubleSide : THREE.FrontSide // Make leaves visible from both sides
     })
 
     const mesh = new THREE.Mesh(geometry, material)
     mesh.castShadow = true
     mesh.receiveShadow = true
+
+    // Rotate leaf to be vertical
+    if (type === 'leaf') {
+      mesh.rotation.y = Math.PI / 2
+    }
+
     return mesh
   }
 
   private onMouseDown(event: MouseEvent) {
+    this.mouseDown = true
+    // Convert mouse coordinates to normalized device coordinates (-1 to +1)
     this.mouse.x = (event.clientX / this.renderer.domElement.clientWidth) * 2 - 1
     this.mouse.y = -(event.clientY / this.renderer.domElement.clientHeight) * 2 + 1
     
-    // Check for part pot interaction
-    this.raycaster.setFromCamera(this.mouse, this.camera)
-    const intersects = this.raycaster.intersectObjects(Array.from(this.partMeshes.values()))
+    // Save drag start position
+    this.dragStartPosition.set(event.clientX, event.clientY, 0)
     
-    if (intersects.length > 0) {
-      const selectedMesh = intersects[0].object
+    // Check for bone/part selection first
+    this.raycaster.setFromCamera(this.mouse, this.camera)
+    const boneIntersects = this.raycaster.intersectObjects(Array.from(this.boneMeshes.values()))
+    
+    if (boneIntersects.length > 0) {
+      // If we hit something, disable camera rotation temporarily
+      this.controls.enableRotate = false
+      
+      const selectedObject = boneIntersects[0].object
+      if (!(selectedObject instanceof THREE.Mesh)) return
+
+      const selectedId = Array.from(this.boneMeshes.entries())
+        .find(([_, mesh]) => mesh === selectedObject)?.[0]
+      
+      if (selectedId) {
+        const bone = this.bones.get(selectedId)
+        this.selectedBoneId = selectedId
+        this.activeBoneId = selectedId // Set active for potential dragging
+        
+        // Calculate drag offset from hit point
+        const intersection = boneIntersects[0].point
+        this.dragOffset.copy(selectedObject.position).sub(intersection)
+        
+        // Add outline to selected object
+        this.outlinePass.selectedObjects = [selectedObject]
+        
+        this.emitEvent('select', {
+          id: selectedId,
+          type: bone ? bone.type : this.getPartTypeFromMesh(selectedObject),
+          position: bone ? bone.start.toArray() : selectedObject.position.toArray(),
+          color: bone?.color?.getHexString() || this.getDefaultColor(bone ? bone.type : this.getPartTypeFromMesh(selectedObject))
+        })
+        return
+      }
+    }
+    
+    // If no bone/part was selected, check for part pot interaction
+    const partIntersects = this.raycaster.intersectObjects(Array.from(this.partMeshes.values()))
+    
+    if (partIntersects.length > 0) {
+      // If we hit something, disable camera rotation temporarily
+      this.controls.enableRotate = false
+      
+      const selectedObject = partIntersects[0].object
+      if (!(selectedObject instanceof THREE.Mesh)) return
+
       const selectedType = Array.from(this.partMeshes.entries())
-        .find(([_, mesh]) => mesh === selectedMesh)?.[0]
+        .find(([_, mesh]) => mesh === selectedObject)?.[0]
       
       if (selectedType) {
-        this.inputManager.setMode('drag')
         this.selectedPartType = selectedType
-        this.isDragging = true
+        // Just select initially - don't start dragging yet
+        this.inputManager.setMode('drag')
         
-        // Hide the preview mesh while dragging
-        selectedMesh.visible = false
+        // Hide the preview mesh while selected
+        selectedObject.visible = false
         
-        // Create new part at planting height
-        const intersection = intersects[0].point.clone()
-        intersection.y = this.plantingArea.y
-        
+        // Create new part at the intersection point but don't start dragging yet
         this.startBoneDrag({
-          worldPosition: intersection,
+          worldPosition: partIntersects[0].point,
           type: selectedType,
           length: 0.3,
           width: 0.05
         })
       }
+    } else {
+      // If clicking empty space, always clear selection
+      this.selectedBoneId = undefined
+      this.outlinePass.selectedObjects = []
+      this.emitEvent('deselect', null)
     }
   }
 
   private onMouseMove(event: MouseEvent) {
+    // Convert mouse coordinates to normalized device coordinates (-1 to +1)
     this.mouse.x = (event.clientX / this.renderer.domElement.clientWidth) * 2 - 1
     this.mouse.y = -(event.clientY / this.renderer.domElement.clientHeight) * 2 + 1
     
-    if (this.isDragging && this.selectedPartType) {
-      // Project mouse onto planting plane
+    // If we have an active bone/part and mouse is still down, check if we should start dragging
+    if (this.activeBoneId && !this.isDragging && this.mouseDown) {
+        const dragDistance = new THREE.Vector3(event.clientX, event.clientY, 0)
+            .sub(this.dragStartPosition)
+            .length()
+        
+        if (dragDistance > 5) { // Start dragging after 5px movement
+            this.isDragging = true
+        }
+    }
+    
+    if (this.isDragging) {
+      // Get all valid surfaces for raycasting
+      const validSurfaces: THREE.Object3D[] = []
+      
+      // Add defined meshes to valid surfaces
+      if (this.mainPot) validSurfaces.push(this.mainPot)
+      if (this.mainDirt) validSurfaces.push(this.mainDirt)
+      if (this.groundPlane) validSurfaces.push(this.groundPlane)
+      
+      // Add all part pots and bone meshes as valid surfaces, excluding the active mesh
+      validSurfaces.push(...Array.from(this.partPots.values()))
+      validSurfaces.push(...Array.from(this.boneMeshes.values())
+        .filter(mesh => mesh !== this.boneMeshes.get(this.activeBoneId!)))
+
+      // Raycast against all surfaces
       this.raycaster.setFromCamera(this.mouse, this.camera)
+      const intersects = this.raycaster.intersectObjects(validSurfaces, false)
       
-      let surfacePoint: THREE.Vector3
-      
-      // First try to intersect with main dirt
-      const mainDirtIntersects = this.raycaster.intersectObject(this.mainDirt!)
-      
-      if (mainDirtIntersects.length > 0) {
-        // Use the exact surface point from main dirt raycast
-        surfacePoint = mainDirtIntersects[0].point
-        
-        // Limit placement to planting radius
-        const toIntersection = surfacePoint.clone().sub(this.plantingArea)
-        const horizontalDist = new THREE.Vector2(toIntersection.x, toIntersection.z).length()
-        
-        if (horizontalDist > this.plantingRadius) {
-          // Only normalize the horizontal components
-          const normalized = new THREE.Vector2(toIntersection.x, toIntersection.z)
-            .normalize()
-            .multiplyScalar(this.plantingRadius)
-          surfacePoint.x = this.plantingArea.x + normalized.x
-          surfacePoint.z = this.plantingArea.z + normalized.y
-        }
-      } else {
-        // If not over main dirt, check mini pots
-        const allDirtMounds = Array.from(this.scene.children).filter(obj => 
-          obj instanceof THREE.Mesh && 
-          obj !== this.mainDirt &&
-          obj.material instanceof THREE.MeshStandardMaterial &&
-          obj.material.color.getHexString() === '3a2a1a' // dirt color
-        )
-        
-        const miniDirtIntersects = this.raycaster.intersectObjects(allDirtMounds)
-        
-        if (miniDirtIntersects.length > 0) {
-          // Use the exact surface point from mini dirt raycast
-          surfacePoint = miniDirtIntersects[0].point
-        } else {
-          // Fallback to plane if not hitting any dirt
-          const planeNormal = new THREE.Vector3(0, 1, 0)
-          const plane = new THREE.Plane(planeNormal, this.plantingArea.y)
-          surfacePoint = new THREE.Vector3()
-          this.raycaster.ray.intersectPlane(plane, surfacePoint)
-        }
+      if (intersects.length > 0) {
+        const intersection = intersects[0].point
+        this.updateBoneDrag(intersection)
       }
-      
-      this.updateBoneDrag(surfacePoint)
     }
   }
 
-  private onMouseUp() {
+  private onMouseUp(event: MouseEvent) {
+    this.mouseDown = false
+    // Re-enable camera rotation
+    this.controls.enableRotate = true
+    
+    // Check if this was a click vs drag
+    const dragDistance = new THREE.Vector3(event.clientX, event.clientY, 0)
+      .sub(this.dragStartPosition)
+      .length()
+    
     if (this.isDragging) {
       // Show the preview mesh again
       if (this.selectedPartType) {
@@ -352,21 +476,8 @@ export class BudEngine {
         if (previewMesh) {
           previewMesh.visible = true
         }
-      }
-      
-      // Check if part is within planting area
-      const bone = this.bones.get(this.activeBoneId!)
-      if (bone) {
-        const distanceFromCenter = bone.start.clone().sub(this.plantingArea).length()
-        if (distanceFromCenter > this.plantingRadius) {
-          // Remove bone if dropped outside planting area
-          const mesh = this.boneMeshes.get(this.activeBoneId!)
-          if (mesh) {
-            this.scene.remove(mesh)
-            this.boneMeshes.delete(this.activeBoneId!)
-          }
-          this.bones.delete(this.activeBoneId!)
-        }
+        // Only clear outline if we were dragging a new part
+        this.outlinePass.selectedObjects = []
       }
       
       this.endBoneDrag()
@@ -399,6 +510,12 @@ export class BudEngine {
 
     // Update renderer
     this.renderer.setSize(width, height)
+    
+    // Update composer
+    this.composer.setSize(width, height)
+    
+    // Update outline pass
+    this.outlinePass.resolution.set(width, height)
   }
 
   private animate = () => {
@@ -407,15 +524,8 @@ export class BudEngine {
     // Update controls
     this.controls.update()
     
-    // Clear everything
-    this.renderer.clear()
-    
-    // Render main scene
-    this.renderer.render(this.scene, this.camera)
-    
-    // Render UI on top
-    this.renderer.clearDepth()
-    this.renderer.render(this.uiScene, this.uiCamera)
+    // Render with post-processing
+    this.composer.render()
   }
 
   // Calculate local coordinate system for a bone
@@ -442,31 +552,47 @@ export class BudEngine {
   // Start dragging a new bone
   startBoneDrag(params: {
     worldPosition: THREE.Vector3,
-    type: Bone['type'],
+    type: PartType,
     length?: number,
     width?: number
   }): string {
-    const id = this.addBone(params)
-    this.activeBoneId = id
-    return id
+    if (params.type === 'stem') {
+      const id = this.addBone(params)
+      this.activeBoneId = id
+      const mesh = this.boneMeshes.get(id)
+      if (mesh) {
+        this.outlinePass.selectedObjects = [mesh]
+      }
+      return id
+    } else {
+      // For non-stem parts, create a simple mesh
+      const id = Math.random().toString(36).substr(2, 9)
+      const mesh = this.createPartMesh(params.type, params.worldPosition)
+      this.boneMeshes.set(id, mesh)
+      this.scene.add(mesh)
+      this.activeBoneId = id
+      this.outlinePass.selectedObjects = [mesh]
+      return id
+    }
   }
 
   // Update bone during drag
   updateBoneDrag(worldPosition: THREE.Vector3) {
     if (!this.activeBoneId) return
-    const bone = this.bones.get(this.activeBoneId)
-    if (!bone) return
-
-    // Update position
-    const offset = new THREE.Vector3().subVectors(worldPosition, bone.start)
-    bone.start.add(offset)
-    bone.end.add(offset)
-
-    // Update mesh
     const mesh = this.boneMeshes.get(this.activeBoneId)
-    if (mesh) {
+    if (!mesh) return
+
+    // For stems, update bone and mesh
+    const bone = this.bones.get(this.activeBoneId)
+    if (bone) {
+      const offset = new THREE.Vector3().subVectors(worldPosition, bone.start)
+      bone.start.add(offset)
+      bone.end.add(offset)
       const center = new THREE.Vector3().addVectors(bone.start, bone.end).multiplyScalar(0.5)
       mesh.position.copy(center)
+    } else {
+      // For non-stem parts, just update position
+      mesh.position.copy(worldPosition)
     }
   }
 
@@ -518,8 +644,11 @@ export class BudEngine {
         material = new THREE.MeshStandardMaterial({ color: '#44aa44' })
         break
       case 'leaf':
-        geometry = new THREE.ConeGeometry(bone.width * 4, bone.end.distanceTo(bone.start), 8)
-        material = new THREE.MeshStandardMaterial({ color: '#66cc66' })
+        geometry = new THREE.CircleGeometry(bone.width * 4, 16)
+        material = new THREE.MeshStandardMaterial({ 
+          color: '#66cc66',
+          side: THREE.DoubleSide
+        })
         break
       case 'thorn':
         geometry = new THREE.ConeGeometry(bone.width * 2, bone.end.distanceTo(bone.start), 4)
@@ -543,7 +672,64 @@ export class BudEngine {
     const rotMatrix = new THREE.Matrix4()
     const up = new THREE.Vector3().subVectors(bone.end, bone.start).normalize()
     rotMatrix.makeBasis(bone.right, up, bone.forward)
+    
+    // For leaves, adjust the orientation to be vertical
+    if (bone.type === 'leaf') {
+      const leafRotation = new THREE.Matrix4().makeRotationY(Math.PI / 2)
+      rotMatrix.multiply(leafRotation)
+    }
+    
     mesh.setRotationFromMatrix(rotMatrix)
+
+    return mesh
+  }
+
+  private createPartMesh(type: PartType, position: THREE.Vector3): THREE.Mesh {
+    let geometry: THREE.BufferGeometry
+    let material: THREE.Material
+    const scale = 1.5 // Match preview scale
+    
+    switch (type) {
+      case 'stem':
+        geometry = new THREE.CylinderGeometry(0.03 * scale, 0.03 * scale, 0.2 * scale, 8)
+        material = new THREE.MeshStandardMaterial({ color: '#44aa44' })
+        break
+      case 'leaf':
+        geometry = new THREE.CircleGeometry(0.12 * scale, 16)
+        // Translate geometry up by half its height so bottom is at origin
+        geometry.translate(0, 0.2 * scale / 2, 0)
+        material = new THREE.MeshStandardMaterial({ 
+          color: '#66cc66',
+          side: THREE.DoubleSide
+        })
+        break
+      case 'thorn':
+        geometry = new THREE.ConeGeometry(0.04 * scale, 0.15 * scale, 4)
+        // Translate geometry up by half its height so bottom is at origin
+        geometry.translate(0, 0.15 * scale / 2, 0)
+        material = new THREE.MeshStandardMaterial({ color: '#aa4444' })
+        break
+      case 'flower':
+        geometry = new THREE.SphereGeometry(0.08 * scale, 8, 8)
+        // Translate geometry up by its radius so bottom is at origin
+        geometry.translate(0, 0.08 * scale, 0)
+        material = new THREE.MeshStandardMaterial({ color: '#cc66cc' })
+        break
+      default:
+        throw new Error(`Invalid part type: ${type}`)
+    }
+
+    const mesh = new THREE.Mesh(geometry, material)
+    mesh.castShadow = true
+    mesh.receiveShadow = true
+    
+    // Position mesh at the provided position (which is already the bottom point)
+    mesh.position.copy(position)
+
+    // Set initial rotation
+    if (type === 'leaf') {
+      mesh.rotation.y = Math.PI / 2 // Make leaf vertical
+    }
 
     return mesh
   }
@@ -554,5 +740,52 @@ export class BudEngine {
 
   update(deltaTime: number) {
     // Will handle physics/wind updates here
+  }
+
+  addEventListener(event: EventType, callback: EventCallback) {
+    if (!this.eventListeners.has(event)) {
+      this.eventListeners.set(event, new Set())
+    }
+    this.eventListeners.get(event)!.add(callback)
+  }
+
+  removeEventListener(event: EventType, callback: EventCallback) {
+    this.eventListeners.get(event)?.delete(callback)
+  }
+
+  private emitEvent(event: EventType, data: any) {
+    this.eventListeners.get(event)?.forEach(callback => callback(data))
+  }
+
+  private getDefaultColor(type: PartType): string {
+    switch (type) {
+      case 'stem': return '44aa44'
+      case 'leaf': return '66cc66'
+      case 'thorn': return 'aa4444'
+      case 'flower': return 'cc66cc'
+    }
+  }
+
+  updateBoneAttributes(id: string, attributes: {
+    color?: string
+  }) {
+    const bone = this.bones.get(id)
+    const mesh = this.boneMeshes.get(id)
+    
+    if (bone && mesh && mesh.material instanceof THREE.MeshStandardMaterial) {
+      if (attributes.color) {
+        bone.color = new THREE.Color(attributes.color)
+        mesh.material.color = bone.color
+      }
+    }
+  }
+
+  private getPartTypeFromMesh(mesh: THREE.Mesh): PartType {
+    // Determine part type based on geometry
+    const geometry = mesh.geometry
+    if (geometry instanceof THREE.CircleGeometry) return 'leaf'
+    if (geometry instanceof THREE.ConeGeometry) return 'thorn'
+    if (geometry instanceof THREE.SphereGeometry) return 'flower'
+    return 'stem' // Default to stem for cylinder geometry
   }
 } 
