@@ -33,8 +33,6 @@ export type Part = {
   boneIds: string[]       // Ordered list of bone IDs making up this part
   // Attachment to parent
   parentBoneId?: string    // Which bone this part is attached to
-  attachPoint?: number     // 0-1 ratio along parent bone
-  attachAngle?: number     // Angle around parent bone in radians
 }
 
 export type Attachment = {
@@ -121,8 +119,8 @@ export class BudEngine {
     
     // Camera setup
     const aspect = container.clientWidth / container.clientHeight
-    this.camera = new THREE.PerspectiveCamera(75, aspect, 0.1, 1000)
-    this.camera.position.set(1.5, 2, -.4)
+    this.camera = new THREE.PerspectiveCamera(40, aspect, 0.1, 1000)
+    this.camera.position.set(2.5, 2.5, -.75)
     this.camera.lookAt(0, 0, 0)
     
     // UI camera (orthographic for 2D panel)
@@ -387,69 +385,67 @@ export class BudEngine {
     
     this.dragStartPosition.set(event.clientX, event.clientY, 0)
     
-    // First check for part preview interaction
+    // Get all valid meshes to check for intersection
+    const validMeshes: THREE.Object3D[] = []
+    
+    // Add preview meshes
+    validMeshes.push(...Array.from(this.partMeshes.values()))
+    
+    // Add all plant part meshes
+    this.scene.traverse(child => {
+      if (!(child instanceof THREE.Mesh)) return
+      if (!child.userData.boneId) return
+      validMeshes.push(child)
+    })
+    
+    // Check for intersections with all valid meshes
     this.raycaster.setFromCamera(this.mouse, this.camera)
-    const previewIntersects = this.raycaster.intersectObjects(
-      Array.from(this.partMeshes.values()),
-      false
-    )
-    
-    if (previewIntersects.length > 0) {
-      const selectedObject = previewIntersects[0].object
-      if (!(selectedObject instanceof THREE.Mesh)) return
-      
-      // Find the part type from the mesh's userData
-      const selectedType = selectedObject.userData.partType as PartType
-      if (!selectedType) return
-      
-      // Disable camera rotation temporarily
-      this.controls.enableRotate = false
-      this.selectedPartType = selectedType
-      this.inputManager.setMode('drag')
-      
-      // Hide the preview mesh while selected
-      selectedObject.visible = false
-      
-      // Create new part at the intersection point
-      const id = this.startBoneDrag({
-        worldPosition: previewIntersects[0].point,
-        type: selectedType,
-        length: 0.3,
-        width: 0.05
-      })
-
-      // Find the newly created part's group and set it as the outline target
-      const partGroup = this.scene.children.find(child => 
-        child instanceof THREE.Group && child.userData.partId === id
-      )
-      if (partGroup) {
-        this.outlinePass.selectedObjects = [partGroup]
-        this.composer.render()
-      }
-
-      this.notifySelect({
-        id,
-        type: selectedType,
-        position: previewIntersects[0].point.toArray(),
-        color: this.getDefaultColor(selectedType)
-      })
-      return
-    }
-    
-    // Check for bone/part selection
-    const intersects = this.raycaster.intersectObjects(this.scene.children, true)
+    const intersects = this.raycaster.intersectObjects(validMeshes, false)
     
     if (intersects.length > 0) {
       const selectedObject = intersects[0].object
-      if (!(selectedObject instanceof THREE.Mesh)) {
-        // If we hit something that's not a mesh (like the ground), clear selection
-        this.selectedBoneId = undefined
-        this.outlinePass.selectedObjects = []
-        this.composer.render()
-        this.notifyDeselect()
+      if (!(selectedObject instanceof THREE.Mesh)) return
+      
+      // Check if this is a preview mesh
+      if (selectedObject.userData.isPartPreview) {
+        const selectedType = selectedObject.userData.partType as PartType
+        if (!selectedType) return
+        
+        // Disable camera rotation temporarily
+        this.controls.enableRotate = false
+        this.selectedPartType = selectedType
+        this.inputManager.setMode('drag')
+        
+        // Hide the preview mesh while selected
+        selectedObject.visible = false
+        
+        // Create new part at the intersection point
+        const id = this.startBoneDrag({
+          worldPosition: intersects[0].point,
+          type: selectedType,
+          length: 0.3,
+          width: 0.05
+        })
+
+        // Find the newly created part's group and set it as the outline target
+        const partGroup = this.scene.children.find(child => 
+          child instanceof THREE.Group && child.userData.partId === id
+        )
+        if (partGroup) {
+          this.outlinePass.selectedObjects = [partGroup]
+          this.composer.render()
+        }
+
+        this.notifySelect({
+          id,
+          type: selectedType,
+          position: intersects[0].point.toArray(),
+          color: this.getDefaultColor(selectedType)
+        })
         return
       }
-
+      
+      // Otherwise this is a plant part mesh
       // Find the parent group (part)
       let partGroup = selectedObject.parent
       while (partGroup && !(partGroup instanceof THREE.Group)) {
@@ -518,20 +514,22 @@ export class BudEngine {
       if (this.mainDirt) validSurfaces.push(this.mainDirt)
       validSurfaces.push(...Array.from(this.partPots.values()))
 
-      // Add stem meshes that aren't part of the active part's hierarchy
+      // Add all part meshes that aren't part of the active part's hierarchy
       const activePart = this.parts.get(this.activePartId)
       if (activePart) {
-        validSurfaces.push(...this.scene.children.filter(child => {
-          if (!(child instanceof THREE.Mesh)) return false
-          // Skip if mesh belongs to active part
-          return !activePart.boneIds.some(boneId => {
-            const bone = this.bones.get(boneId)
-            if (!bone) return false
-            const worldTransform = this.getWorldTransformForBone(bone)
-            const bonePos = new THREE.Vector3().setFromMatrixPosition(worldTransform)
-            return bonePos.distanceTo(child.position) < 0.01
-          })
-        }))
+        this.scene.traverse(child => {
+          if (!(child instanceof THREE.Mesh)) return
+          if (!child.userData.boneId) return
+          
+          // Skip if mesh belongs to active part or its parents
+          const meshPartId = child.userData.partId
+          if (!meshPartId) return
+
+          const parentIds = this.partParentIds.get(meshPartId)
+          if (parentIds?.has(activePart.id)) return
+          
+          validSurfaces.push(child)
+        })
       }
 
       this.raycaster.setFromCamera(this.mouse, this.camera)
@@ -773,12 +771,36 @@ export class BudEngine {
 
     let currentTransform = parentWorldTransform.clone()
     
-    // Now create new meshes for each bone
+    // Process each bone in sequence
     for (const boneId of part.boneIds) {
       const bone = this.bones.get(boneId)
       if (!bone) continue
 
-      // Create new mesh
+      // Calculate bone's local transform
+      const localTransform = new THREE.Matrix4()
+      const worldUp = new THREE.Vector3(0, 1, 0)
+      
+      // Create rotation matrix from bone's direction
+      if (Math.abs(bone.direction.dot(worldUp)) < 0.99) {
+        const right = new THREE.Vector3().crossVectors(worldUp, bone.direction).normalize()
+        const forward = new THREE.Vector3().crossVectors(bone.direction, right).normalize()
+        localTransform.makeBasis(right, bone.direction, forward)
+      } else {
+        const right = new THREE.Vector3(1, 0, 0)
+        const forward = new THREE.Vector3(0, 0, 1)
+        localTransform.makeBasis(right, bone.direction, forward)
+      }
+
+      // Apply twist if any
+      if (bone.twist !== 0) {
+        const twistMatrix = new THREE.Matrix4().makeRotationAxis(bone.direction, bone.twist)
+        localTransform.multiply(twistMatrix)
+      }
+
+      // Apply current world transform
+      const worldTransform = currentTransform.clone().multiply(localTransform)
+
+      // Create mesh for this bone
       let geometry: THREE.BufferGeometry
       let material: THREE.Material
       
@@ -822,20 +844,30 @@ export class BudEngine {
       mesh.userData.partId = partId
       mesh.userData.parentPartIds = Array.from(currentParentIds)
 
-      // Position and rotate mesh
-      const worldTransform = this.getWorldTransformForBone(bone)
+      // Position and rotate mesh using world transform
       mesh.position.setFromMatrixPosition(worldTransform)
-      mesh.setRotationFromMatrix(worldTransform)
+      
+      // Get the same direction we use for the green arrow
+      const boneUp = new THREE.Vector3(0, 1, 0).applyMatrix4(worldTransform).normalize()
+      
+      // Directly align mesh with boneUp
+      const meshUp = new THREE.Vector3(0, 1, 0)
+      mesh.quaternion.setFromUnitVectors(meshUp, boneUp)
 
       // Add to part group
       partGroup.add(mesh)
 
       // Add debug visualization if debug mode is on
-      if (this.debugMode) {
+      if (0 && this.debugMode) {
         const boneStart = new THREE.Vector3().setFromMatrixPosition(worldTransform)
-        const boneRight = new THREE.Vector3(1, 0, 0).applyMatrix4(worldTransform).normalize()
         const boneUp = new THREE.Vector3(0, 1, 0).applyMatrix4(worldTransform).normalize()
-        const boneForward = new THREE.Vector3(0, 0, 1).applyMatrix4(worldTransform).normalize()
+        
+        // Calculate boneRight as perpendicular to boneUp and world forward
+        const worldForward = new THREE.Vector3(0, 0, 1)
+        const boneRight = new THREE.Vector3().crossVectors(worldForward, boneUp).normalize()
+        
+        // Calculate boneForward to complete orthonormal basis
+        const boneForward = new THREE.Vector3().crossVectors(boneUp, boneRight).normalize()
 
         // Debug vectors with custom materials
         const arrowMat1 = new THREE.LineBasicMaterial({
@@ -862,7 +894,7 @@ export class BudEngine {
         const arrowHelper1 = new THREE.ArrowHelper(
           boneRight,
           boneStart,
-          0.2,
+          bone.width,
           0xff0000
         )
         arrowHelper1.line.material = arrowMat1
@@ -870,6 +902,19 @@ export class BudEngine {
         arrowHelper1.userData.isDebug = true
         arrowHelper1.renderOrder = 999
         partGroup.add(arrowHelper1)
+
+        // Add negative right arrow (red)
+        const arrowHelper1Neg = new THREE.ArrowHelper(
+          boneRight.clone().negate(),
+          boneStart,
+          bone.width,
+          0xff0000
+        )
+        arrowHelper1Neg.line.material = arrowMat1
+        arrowHelper1Neg.cone.material = arrowMat1
+        arrowHelper1Neg.userData.isDebug = true
+        arrowHelper1Neg.renderOrder = 999
+        partGroup.add(arrowHelper1Neg)
 
         const arrowHelper2 = new THREE.ArrowHelper(
           boneUp,
@@ -886,7 +931,7 @@ export class BudEngine {
         const arrowHelper3 = new THREE.ArrowHelper(
           boneForward,
           boneStart,
-          0.2,
+          bone.width,
           0x0000ff
         )
         arrowHelper3.line.material = arrowMat3
@@ -894,24 +939,169 @@ export class BudEngine {
         arrowHelper3.userData.isDebug = true
         arrowHelper3.renderOrder = 999
         partGroup.add(arrowHelper3)
+
+        // Add negative forward arrow (blue)
+        const arrowHelper3Neg = new THREE.ArrowHelper(
+          boneForward.clone().negate(),
+          boneStart,
+          bone.width,
+          0x0000ff
+        )
+        arrowHelper3Neg.line.material = arrowMat3
+        arrowHelper3Neg.cone.material = arrowMat3
+        arrowHelper3Neg.userData.isDebug = true
+        arrowHelper3Neg.renderOrder = 999
+        partGroup.add(arrowHelper3Neg)
       }
 
       // Process child parts
       for (const [childPartId, attachment] of bone.children.entries()) {
-        const attachmentPoint = worldTransform.clone()
-        const boneDirection = new THREE.Vector3(0, 1, 0).applyMatrix4(worldTransform)
+        // Get bone's world transform matrix
+        const boneTransform = worldTransform.clone()
         
-        const offset = boneDirection.multiplyScalar(bone.length * attachment.ratio)
-        attachmentPoint.setPosition(mesh.position.clone().add(offset))
+        // Get bone start position and direction in world space
+        const boneStart = new THREE.Vector3().setFromMatrixPosition(boneTransform)
+        const boneUp = new THREE.Vector3(0, 1, 0).applyMatrix4(boneTransform).normalize()
         
-        const rotationMatrix = new THREE.Matrix4().makeRotationAxis(boneDirection.normalize(), attachment.angle)
-        attachmentPoint.multiply(rotationMatrix)
+        // Calculate attachment point along bone
+        const attachPoint = boneStart.clone().add(
+          boneUp.multiplyScalar(bone.length * attachment.ratio)
+        )
         
-        // Pass the current partGroup as the parent for the child, along with updated parent IDs
-        this.renderPartHierarchy(childPartId, attachmentPoint, partGroup, currentParentIds)
+        // Create unit vector in XZ plane based on angle
+        const localOffset = new THREE.Vector3(
+          Math.cos(attachment.angle),
+          0,
+          Math.sin(attachment.angle)
+        ).normalize()
+        
+        // Create a matrix for just the rotation part of the bone transform
+        const rotationMatrix = boneTransform.clone()
+        rotationMatrix.setPosition(new THREE.Vector3(0, 0, 0))
+        
+        // Transform the local offset by just the rotation to get world space direction
+        const perpOffset = localOffset.clone()
+          .applyMatrix4(rotationMatrix)
+          .normalize()
+          .multiplyScalar(bone.width)
+        
+        // Add offset to attachment point
+        attachPoint.add(perpOffset)
+        
+        // Create attachment transform matrix
+        const attachmentTransform = new THREE.Matrix4()
+        
+        // Get parent bone's up direction
+        const parentUp = boneUp.clone().normalize()
+        
+        // Create child's coordinate system:
+        // 1. childUp is the perpOffset direction (perpendicular to parent)
+        const childUp = perpOffset.clone().normalize()
+        
+        // 2. childForward is perpendicular to both childUp and parentUp
+        const childForward = new THREE.Vector3().crossVectors(childUp, parentUp).normalize()
+        
+        // 3. childRight completes the right-handed system
+        const childRight = new THREE.Vector3().crossVectors(childForward, childUp).normalize()
+        
+        // Create attachment transform matrix with position and orientation
+        attachmentTransform.makeBasis(
+          childRight,
+          childUp,
+          childForward
+        )
+        attachmentTransform.setPosition(attachPoint)
+        
+        // Recursively render child part
+        this.renderPartHierarchy(childPartId, attachmentTransform, partGroup, currentParentIds)
+
+        // Add debug visualization if debug mode is on
+        if (this.debugMode) {
+          // Debug vectors with custom materials
+          const arrowMat1 = new THREE.LineBasicMaterial({
+            color: 0xff0000,
+            depthTest: false,
+            transparent: true,
+            opacity: 0.8
+          })
+          const arrowMat2 = new THREE.LineBasicMaterial({
+            color: 0x00ff00,
+            depthTest: false,
+            transparent: true,
+            opacity: 0.8
+          })
+          const arrowMat3 = new THREE.LineBasicMaterial({
+            color: 0x0000ff,
+            depthTest: false,
+            transparent: true,
+            opacity: 0.8
+          })
+
+          // Visualize attachment coordinate system
+          const attachHelper1 = new THREE.ArrowHelper(
+            childRight,
+            attachPoint,
+            bone.width * 2,
+            0xff0000
+          )
+          attachHelper1.line.material = arrowMat1
+          attachHelper1.cone.material = arrowMat1
+          attachHelper1.userData.isDebug = true
+          attachHelper1.renderOrder = 999
+          partGroup.add(attachHelper1)
+
+          const attachHelper2 = new THREE.ArrowHelper(
+            childUp,
+            attachPoint,
+            bone.width * 2,
+            0x00ff00
+          )
+          attachHelper2.line.material = arrowMat2
+          attachHelper2.cone.material = arrowMat2
+          attachHelper2.userData.isDebug = true
+          attachHelper2.renderOrder = 999
+          partGroup.add(attachHelper2)
+
+          const attachHelper3 = new THREE.ArrowHelper(
+            childForward,
+            attachPoint,
+            bone.width * 2,
+            0x0000ff
+          )
+          attachHelper3.line.material = arrowMat3
+          attachHelper3.cone.material = arrowMat3
+          attachHelper3.userData.isDebug = true
+          attachHelper3.renderOrder = 999
+          partGroup.add(attachHelper3)
+
+          // Add negative arrows
+          const attachHelper1Neg = new THREE.ArrowHelper(
+            childRight.clone().negate(),
+            attachPoint,
+            bone.width * 2,
+            0xff0000
+          )
+          attachHelper1Neg.line.material = arrowMat1
+          attachHelper1Neg.cone.material = arrowMat1
+          attachHelper1Neg.userData.isDebug = true
+          attachHelper1Neg.renderOrder = 999
+          partGroup.add(attachHelper1Neg)
+
+          const attachHelper3Neg = new THREE.ArrowHelper(
+            childForward.clone().negate(),
+            attachPoint,
+            bone.width * 2,
+            0x0000ff
+          )
+          attachHelper3Neg.line.material = arrowMat3
+          attachHelper3Neg.cone.material = arrowMat3
+          attachHelper3Neg.userData.isDebug = true
+          attachHelper3Neg.renderOrder = 999
+          partGroup.add(attachHelper3Neg)
+        }
       }
 
-      // Update transform for next bone in sequence
+      // Update current transform for next bone in sequence
       currentTransform = worldTransform
     }
   }
@@ -923,6 +1113,24 @@ export class BudEngine {
 
     const firstBone = this.bones.get(part.boneIds[0])
     if (!firstBone) return
+
+    // If this part wasn't already a root, make it one
+    if (!this.roots.has(part.id)) {
+      // Remove from parent's children
+      if (part.parentBoneId) {
+        const oldParentBone = this.bones.get(part.parentBoneId)
+        if (oldParentBone) {
+          oldParentBone.children.delete(part.id)
+        }
+        part.parentBoneId = undefined
+      }
+      
+      // Add to roots
+      this.roots.add(part.id)
+      
+      // Create new body
+      this.createBodyForPart(part.id)
+    }
 
     // Find the active body
     const activeBody = Array.from(this.bodies.values()).find(b => b.rootPartId === part.id)
@@ -960,7 +1168,6 @@ export class BudEngine {
     })
     
     const boneIntersects = this.raycaster.intersectObjects(stemMeshes)
-    console.log(boneIntersects)
     
     if (boneIntersects.length > 0) {
       const hitMesh = boneIntersects[0].object
@@ -972,6 +1179,9 @@ export class BudEngine {
 
       const parentPart = this.parts.get(parentBone.partId)
       if (parentPart?.type === 'stem') {
+        // Store the currently selected part ID before making changes
+        const selectedPartId = this.activePartId
+        
         // Remove from roots since it's getting a parent
         this.roots.delete(part.id)
 
@@ -997,25 +1207,26 @@ export class BudEngine {
         
         // Calculate vector from attachment point to mouse in bone's local space
         const toMouse = new THREE.Vector3().subVectors(worldPosition, attachPoint)
-        const projectedToMouse = new THREE.Vector3(
-          toMouse.dot(boneRight),
-          0, // Ignore component along bone
-          toMouse.dot(boneForward)
-        ).normalize()
         
-        // Calculate angle in bone's local space (in XZ plane)
-        const angle = Math.atan2(projectedToMouse.z, projectedToMouse.x)
-
+        // Create inverse rotation matrix to transform toMouse into bone's local space
+        const inverseRotation = boneTransform.clone()
+        inverseRotation.setPosition(new THREE.Vector3(0, 0, 0))
+        inverseRotation.invert()
+        
+        // Transform toMouse into bone's local space
+        const localToMouse = toMouse.clone().applyMatrix4(inverseRotation)
+        
+        // Project onto XZ plane in local space
+        localToMouse.y = 0
+        localToMouse.normalize()
+        
+        // Calculate angle in local XZ plane
+        const angle = Math.atan2(localToMouse.z, localToMouse.x)
+        
         console.log({ ratio, clampedRatio, degrees: angle * (180 / Math.PI) })
         
-        // Calculate perpendicular direction based on angle
-        const perpDirection = new THREE.Vector3()
-          .addScaledVector(boneRight, Math.cos(angle))
-          .addScaledVector(boneForward, Math.sin(angle))
-          .normalize()
-        
-        // Set direction perpendicular to bone
-        firstBone.direction.copy(perpDirection)
+        // Calculate perpendicular direction
+        firstBone.direction.copy(new THREE.Vector3(0, 1, 0))
         
         // Remove from old parent if exists
         if (part.parentBoneId) {
@@ -1046,9 +1257,33 @@ export class BudEngine {
         }
         if (rootPart && rootPart.id) {
           this.renderBody(rootPart.id)
+          
+          // After rendering, find the new group for our selected part
+          const newPartGroup = this.scene.children.find(child => 
+            child instanceof THREE.Group && child.userData.partId === selectedPartId
+          )
+          if (newPartGroup) {
+            this.outlinePass.selectedObjects = [newPartGroup]
+            this.composer.render()
+          } else {
+            // If not found at root level, search entire scene
+            let foundGroup: THREE.Group | null = null
+            this.scene.traverse(child => {
+              if (child instanceof THREE.Group && child.userData.partId === selectedPartId) {
+                foundGroup = child
+              }
+            })
+            if (foundGroup) {
+              this.outlinePass.selectedObjects = [foundGroup]
+              this.composer.render()
+            }
+          }
         }
       }
     } else {
+      // Store the currently selected part ID before making changes
+      const selectedPartId = this.activePartId
+      
       // Detaching from parent or initial drag
       if (part.parentBoneId) {
         const oldParentBone = this.bones.get(part.parentBoneId)
@@ -1064,6 +1299,18 @@ export class BudEngine {
         
         // Create new body for detached part
         this.createBodyForPart(part.id)
+        
+        // Render the updated body
+        this.renderBody(part.id)
+        
+        // After rendering, find the new group for our selected part
+        const newPartGroup = this.scene.children.find(child => 
+          child instanceof THREE.Group && child.userData.partId === selectedPartId
+        )
+        if (newPartGroup) {
+          this.outlinePass.selectedObjects = [newPartGroup]
+          this.composer.render()
+        }
       }
       
       // Update bone direction and position
