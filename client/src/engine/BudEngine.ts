@@ -49,6 +49,7 @@ export type Bone = {
   length: number          // The length of the bone
   width: number          // Thickness/radius of the bone
   children: Map<string, Attachment>  // Map from child part ID to attachment data
+  isHead?: boolean       // Whether this bone is a head with eyes
 }
 
 // Part preview in the UI panel
@@ -122,7 +123,7 @@ export class BudEngine {
     // Camera setup
     const aspect = container.clientWidth / container.clientHeight
     this.camera = new THREE.PerspectiveCamera(40, aspect, 0.1, 1000)
-    this.camera.position.set(2.5, 2.5, -.75)
+    this.camera.position.set(1, 3, 2.5)
     this.camera.lookAt(0, 0, 0)
     
     // UI camera (orthographic for 2D panel)
@@ -286,11 +287,11 @@ export class BudEngine {
       ['stem', '#66cc66'],  // Brighter green
       ['leaf', '#88ee88'],  // Even brighter green
       ['thorn', '#cc6666'], // Brighter red
-      ['flower', '#ee88ee'] // Brighter purple
+      ['flower', '#ffdd88'] // Brighter purple
     ]
 
     const radius = 2 // Distance from center
-    const startAngle = -Math.PI / 3 // Start from -60 degrees
+    const startAngle = Math.PI / 4
     const angleStep = Math.PI / 6 // 30 degrees between pots
 
     parts.forEach(([type, color], i) => {
@@ -320,44 +321,42 @@ export class BudEngine {
       const mesh = this.createPartPreview(type, color)
       // Calculate proper height based on part type
       let previewHeight = 0.23 // Base height (dirt surface)
-      switch(type) {
-        case 'stem':
-          previewHeight += 0.1 // Half height of stem
-          break
-        case 'leaf':
-          previewHeight += 0.1 // Half height of leaf
-          break
-        case 'thorn':
-          previewHeight += 0.075 // Half height of thorn
-          break
-        case 'flower':
-          previewHeight += 0.08 // Radius of sphere
-          break
-      }
       mesh.position.set(x, previewHeight, z)
       this.scene.add(mesh)
       this.partMeshes.set(type, mesh)
     })
   }
 
-  private createPartPreview(type: PartType, color: string): THREE.Mesh {
-    let geometry: THREE.BufferGeometry
-    const scale = 1.5 // Make preview parts a bit larger
-
+  private createGeometry(type: PartType, params: { width: number, length: number }): THREE.BufferGeometry {
     switch (type) {
       case 'stem':
-        geometry = new THREE.CylinderGeometry(0.03 * scale, 0.03 * scale, 0.2 * scale, 8)
-        break
+        const stemGeo = new THREE.CylinderGeometry(params.width, params.width, params.length, 8)
+        stemGeo.translate(0, params.length / 2, 0)
+        return stemGeo
       case 'leaf':
-        geometry = new THREE.CircleGeometry(0.12 * scale, 16)
-        break
+        const radius = params.length * 2 / 7
+        const leafGeo = new THREE.CircleGeometry(radius, 16)
+        leafGeo.scale(1, 2, 1) // Scale Y to make it oval
+        leafGeo.translate(0, radius * 2, 0) // Adjust translation for new height
+        return leafGeo
       case 'thorn':
-        geometry = new THREE.ConeGeometry(0.04 * scale, 0.15 * scale, 4)
-        break
+        const length = params.length / 2
+        const thornGeo = new THREE.ConeGeometry(params.width / 2, length, 4)
+        thornGeo.translate(0, length / 2, 0)
+        return thornGeo
       case 'flower':
-        geometry = new THREE.SphereGeometry(0.08 * scale, 8, 8)
-        break
+        const flowerGeo = new THREE.ConeGeometry(params.width * 2, params.length * .25, 16)
+        flowerGeo.rotateX(Math.PI) // Rotate 180 degrees around X axis to face down
+        return flowerGeo
     }
+  }
+
+  private createPartPreview(type: PartType, color: string): THREE.Mesh {
+    const scale = 1.5 // Make preview parts a bit larger
+    const geometry = this.createGeometry(type, {
+      width: type === 'stem' ? 0.03 * scale : 0.05 * scale,
+      length: type === 'stem' ? 0.2 * scale : 0.15 * scale
+    })
 
     const material = new THREE.MeshStandardMaterial({ 
       color,
@@ -847,39 +846,17 @@ export class BudEngine {
       this.boneTransforms.set(boneId, worldTransform.clone())
 
       // Create mesh for this bone at current position with new rotation
-      let geometry: THREE.BufferGeometry
-      let material: THREE.Material
-      
-      switch (part.type) {
-        case 'stem':
-          geometry = new THREE.CylinderGeometry(bone.width, bone.width, bone.length, 8)
-          material = new THREE.MeshStandardMaterial({ 
-            color: part.color || '#44aa44',
-            transparent: false,
-            opacity: 1
-          })
-          break
-        case 'leaf':
-          geometry = new THREE.CircleGeometry(bone.width * 4, 16)
-          material = new THREE.MeshStandardMaterial({ 
-            color: part.color || '#66cc66',
-            side: THREE.DoubleSide
-          })
-          break
-        case 'thorn':
-          geometry = new THREE.ConeGeometry(bone.width * 2, bone.length, 4)
-          material = new THREE.MeshStandardMaterial({ 
-            color: part.color || '#aa4444'
-          })
-          break
-        case 'flower':
-          geometry = new THREE.SphereGeometry(bone.width * 3, 8, 8)
-          material = new THREE.MeshStandardMaterial({ 
-            color: part.color || '#cc66cc'
-          })
-          break
-      }
-      geometry.translate(0, bone.length / 2, 0)
+      const geometry = this.createGeometry(part.type, {
+        width: bone.width,
+        length: bone.length
+      })
+
+      const material = new THREE.MeshStandardMaterial({ 
+        color: part.color || this.getDefaultColor(part.type),
+        roughness: 0.7,
+        metalness: 0.2,
+        side: part.type === 'leaf' || part.type === 'flower' ? THREE.DoubleSide : THREE.FrontSide
+      })
 
       const mesh = new THREE.Mesh(geometry, material)
       mesh.castShadow = true
@@ -889,6 +866,43 @@ export class BudEngine {
       mesh.userData.bodyId = body.id
       mesh.userData.partId = partId
       mesh.userData.parentPartIds = Array.from(currentParentIds)
+
+      // Add eyes if this is a head bone and it's a stem
+      if (bone.isHead && part.type === 'stem') {
+        const eyeGroup = new THREE.Group()
+        
+        // Create eyes with flat shading
+        const eyeGeo = new THREE.SphereGeometry(bone.width * 0.4, 12, 8)
+        const eyeMat = new THREE.MeshStandardMaterial({ 
+          color: '#ffffff',
+          roughness: 0.7,
+          metalness: 0.2,
+        })
+        const pupilGeo = new THREE.SphereGeometry(bone.width * 0.2, 8, 8)
+        const pupilMat = new THREE.MeshStandardMaterial({ 
+          color: '#000000',
+          roughness: 0.7,
+          metalness: 0.2,
+        })
+        
+        // Left eye with better positioning
+        const leftEye = new THREE.Mesh(eyeGeo, eyeMat)
+        leftEye.position.set(bone.width * 1.2, bone.length * 0.8, bone.width * 0.8)
+        const leftPupil = new THREE.Mesh(pupilGeo, pupilMat)
+        leftPupil.position.z = bone.width * 0.3
+        leftEye.add(leftPupil)
+        eyeGroup.add(leftEye)
+        
+        // Right eye with better positioning
+        const rightEye = new THREE.Mesh(eyeGeo, eyeMat)
+        rightEye.position.set(-bone.width * 1.2, bone.length * 0.8, bone.width * 0.8)
+        const rightPupil = new THREE.Mesh(pupilGeo, pupilMat)
+        rightPupil.position.z = bone.width * 0.3
+        rightEye.add(rightPupil)
+        eyeGroup.add(rightEye)
+        
+        mesh.add(eyeGroup)
+      }
 
       // Position and rotate mesh using world transform
       mesh.position.setFromMatrixPosition(worldTransform)
@@ -973,7 +987,7 @@ export class BudEngine {
         const childUp = perpOffset.clone().normalize()
         
         // 2. childForward is perpendicular to both childUp and parentUp
-        const childForward = new THREE.Vector3().crossVectors(childUp, parentUp).normalize()
+        const childForward = parentUp // new THREE.Vector3().crossVectors(childUp, parentUp).normalize()
         
         // 3. childRight completes the right-handed system
         const childRight = new THREE.Vector3().crossVectors(childForward, childUp).normalize()
@@ -1295,7 +1309,8 @@ export class BudEngine {
     partId: string,
     position: THREE.Vector3,
     length?: number,
-    width?: number
+    width?: number,
+    isHead?: boolean
   }): string {
     const id = Math.random().toString(36).substr(2, 9)
     const length = params.length || 0.3
@@ -1308,7 +1323,8 @@ export class BudEngine {
       twist: 0,
       length,
       width,
-      children: new Map()
+      children: new Map(),
+      isHead: params.isHead
     }
 
     this.bones.set(id, bone)
@@ -1375,10 +1391,10 @@ export class BudEngine {
 
   private getDefaultColor(type: PartType): string {
     switch (type) {
-      case 'stem': return '44aa44'
-      case 'leaf': return '66cc66'
-      case 'thorn': return 'aa4444'
-      case 'flower': return 'cc66cc'
+      case 'stem': return '#44aa44'
+      case 'leaf': return '#66cc66'
+      case 'thorn': return '#aa4444'
+      case 'flower': return '#ffdd88'
     }
   }
 
@@ -1416,7 +1432,8 @@ export class BudEngine {
     worldPosition: THREE.Vector3,
     type: PartType,
     length?: number,
-    width?: number
+    width?: number,
+    isHead?: boolean
   }): string {
     const id = Math.random().toString(36).substr(2, 9)
     
@@ -1432,7 +1449,8 @@ export class BudEngine {
       partId: id,
       position: params.worldPosition.clone(),
       length: params.length || 0.3,
-      width: params.width || 0.05
+      width: params.width || 0.05,
+      isHead: params.isHead
     })
     
     // Add bone to part's sequence
@@ -1484,10 +1502,14 @@ export class BudEngine {
     const adjustedPosition = params.worldPosition.clone()
     adjustedPosition.y = this.plantingArea.y
 
+    // Make the first stem created a head
+    const isFirstStem = params.type === 'stem' && this.parts.size === 0
+
     // Create part at the adjusted position
     const partId = this.addPart({
       ...params,
-      worldPosition: adjustedPosition
+      worldPosition: adjustedPosition,
+      isHead: isFirstStem // Only set isHead true for the first stem
     })
     this.activePartId = partId
     
@@ -1700,7 +1722,8 @@ export class BudEngine {
       partId: part.id,
       position: new THREE.Vector3(), // Position doesn't matter, will be set by transform
       length: firstBone.length,
-      width: firstBone.width
+      width: firstBone.width,
+      isHead: false
     })
     console.log('BudEngine: Created new bone', { newBoneId, firstBone })
     
@@ -1741,7 +1764,7 @@ export class BudEngine {
     // Don't remove if only one bone left
     if (part.boneIds.length <= 1) {
       console.log('BudEngine: Cannot shrink - only one bone left', { boneCount: part.boneIds.length })
-      return
+      return // Can't remove if has attachments
     }
     
     // Get first bone
