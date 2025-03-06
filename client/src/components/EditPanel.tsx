@@ -10,9 +10,11 @@ type SelectedPart = {
 type EditPanelProps = {
   selectedPart: SelectedPart
   onUpdateAttributes: (id: string, attributes: { color?: string }) => void
+  onGrowStem?: (id: string) => void
+  onShrinkStem?: (id: string) => void
 }
 
-export function EditPanel({ selectedPart, onUpdateAttributes }: EditPanelProps) {
+export function EditPanel({ selectedPart, onUpdateAttributes, onGrowStem, onShrinkStem }: EditPanelProps) {
   if (!selectedPart) return null
 
   return (
@@ -34,6 +36,23 @@ export function EditPanel({ selectedPart, onUpdateAttributes }: EditPanelProps) 
           }}
         />
       </div>
+      
+      {selectedPart.type === 'stem' && onGrowStem && onShrinkStem && (
+        <div className="edit-row">
+          <button onClick={() => {
+            console.log('EditPanel: Grow clicked', { id: selectedPart.id })
+            onGrowStem(selectedPart.id)
+          }}>
+            grow
+          </button>
+          <button onClick={() => {
+            console.log('EditPanel: Shrink clicked', { id: selectedPart.id })
+            onShrinkStem(selectedPart.id)
+          }}>
+            shrink
+          </button>
+        </div>
+      )}
     </div>
   )
 } 

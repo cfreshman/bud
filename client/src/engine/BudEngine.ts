@@ -99,6 +99,7 @@ export class BudEngine {
   private onDeselect?: () => void
   private debugMode: boolean = false  // Add debug flag
   private boneTransforms: Map<string, THREE.Matrix4> = new Map() // Store transforms for each bone
+  private partAdded: boolean = false // Track when parts are added
   
   constructor(container: HTMLElement, callbacks?: { 
     onSelect?: (data: { id: string, type: PartType, position: [number, number, number], color: string }) => void
@@ -470,7 +471,7 @@ export class BudEngine {
         this.composer.render()
         
         this.notifySelect({
-          id: selectedObject.userData.boneId,
+          id: partGroup.userData.partId,
           type: selectedPart.type,
           position: selectedObject.position.toArray(),
           color: this.getDefaultColor(selectedPart.type)
@@ -646,6 +647,7 @@ export class BudEngine {
       return child.userData.bodyId !== undefined
     })
     
+    // Only remove the visual meshes, not the underlying data
     groupsToRemove.forEach(group => {
       this.scene.remove(group)
       group.traverse(child => {
@@ -1362,6 +1364,12 @@ export class BudEngine {
   }
 
   private notifySelect(data: { id: string, type: PartType, position: [number, number, number], color: string }) {
+    console.log('BudEngine: Notifying select', {
+      data,
+      partExists: this.parts.has(data.id),
+      selectedBoneId: this.selectedBoneId,
+      activePartId: this.activePartId
+    })
     // Ensure color is always defined
     const safeData = {
       ...data,
@@ -1448,8 +1456,27 @@ export class BudEngine {
     // Add bone to part's sequence
     part.boneIds.push(boneId)
     
+    // Log before storing
+    console.log('BudEngine: Before storing part', {
+      id,
+      type: params.type,
+      partsMapSize: this.parts.size,
+      partsMapKeys: Array.from(this.parts.keys())
+    })
+    
     // Store the part
     this.parts.set(id, part)
+    this.partAdded = true // Set flag when part is added
+    
+    // Log after storing
+    console.log('BudEngine: After storing part', {
+      id,
+      type: params.type,
+      partsMapSize: this.parts.size,
+      partsMapKeys: Array.from(this.parts.keys()),
+      storedPart: this.parts.get(id),
+      partAdded: this.partAdded
+    })
     
     // Add to roots since it starts with no parent
     this.roots.add(id)
@@ -1662,5 +1689,124 @@ export class BudEngine {
     }
 
     return currentTransform
+  }
+
+  // Add bone to start of stem part
+  growStemPart(partId: string) {
+    console.log('BudEngine: Growing stem part', { 
+      partId,
+      partsMapSize: this.parts.size,
+      partsMap: this.parts,
+      hasRequestedPart: this.parts.has(partId),
+      requestedPart: this.parts.get(partId),
+      partAdded: this.partAdded
+    })
+    const part = this.parts.get(partId)
+    if (!part || part.type !== 'stem') {
+      console.log('BudEngine: Invalid part for growing', { part })
+      return
+    }
+    
+    // Create new bone with same properties as first bone
+    const firstBone = this.bones.get(part.boneIds[0])
+    if (!firstBone) {
+      console.log('BudEngine: No first bone found', { boneIds: part.boneIds })
+      return
+    }
+    
+    const newBoneId = this.addBone({
+      partId: part.id,
+      position: new THREE.Vector3(), // Position doesn't matter, will be set by transform
+      length: firstBone.length,
+      width: firstBone.width
+    })
+    console.log('BudEngine: Created new bone', { newBoneId, firstBone })
+    
+    // Add new bone to start of array
+    part.boneIds.unshift(newBoneId)
+    console.log('BudEngine: Updated bone array', { boneIds: part.boneIds })
+    
+    // Find root part and render
+    let currentPart = part
+    while (currentPart.parentBoneId) {
+      const parentBone = this.bones.get(currentPart.parentBoneId)
+      if (!parentBone) break
+      const parentPart = this.parts.get(parentBone.partId)
+      if (!parentPart) break
+      currentPart = parentPart
+    }
+    
+    // Find and render body
+    const body = Array.from(this.bodies.values())
+      .find(b => b.rootPartId === currentPart.id)
+    if (body) {
+      console.log('BudEngine: Rendering updated body', { bodyId: body.id })
+      this.renderBody(body.id)
+    } else {
+      console.log('BudEngine: No body found for part', { rootPartId: currentPart.id })
+    }
+  }
+
+  // Remove bone from start of stem part
+  shrinkStemPart(partId: string) {
+    console.log('BudEngine: Shrinking stem part', { partId })
+    const part = this.parts.get(partId)
+    if (!part || part.type !== 'stem') {
+      console.log('BudEngine: Invalid part for shrinking', { part })
+      return
+    }
+    
+    // Don't remove if only one bone left
+    if (part.boneIds.length <= 1) {
+      console.log('BudEngine: Cannot shrink - only one bone left', { boneCount: part.boneIds.length })
+      return
+    }
+    
+    // Get first bone
+    const firstBone = this.bones.get(part.boneIds[0])
+    if (!firstBone) {
+      console.log('BudEngine: No first bone found', { boneIds: part.boneIds })
+      return
+    }
+    
+    // Check if first bone has any children
+    if (firstBone.children.size > 0) {
+      console.log('BudEngine: Cannot shrink - bone has children', { childCount: firstBone.children.size })
+      return // Can't remove if has attachments
+    }
+    
+    // Remove bone from array and delete it
+    const removedBoneId = part.boneIds.shift()
+    if (removedBoneId) {
+      this.bones.delete(removedBoneId)
+      console.log('BudEngine: Removed bone', { removedBoneId, remainingBones: part.boneIds })
+    }
+    
+    // Find root part and render
+    let currentPart = part
+    while (currentPart.parentBoneId) {
+      const parentBone = this.bones.get(currentPart.parentBoneId)
+      if (!parentBone) break
+      const parentPart = this.parts.get(parentBone.partId)
+      if (!parentPart) break
+      currentPart = parentPart
+    }
+    
+    // Find and render body
+    const body = Array.from(this.bodies.values())
+      .find(b => b.rootPartId === currentPart.id)
+    if (body) {
+      console.log('BudEngine: Rendering updated body', { bodyId: body.id })
+      this.renderBody(body.id)
+    } else {
+      console.log('BudEngine: No body found for part', { rootPartId: currentPart.id })
+    }
+  }
+
+  // Check if a part was added and reset the flag
+  wasPartAdded(): boolean {
+    const wasAdded = this.partAdded
+    this.partAdded = false
+    return wasAdded
   }
 } 

@@ -34,13 +34,7 @@ function App() {
       window.budEngine = engineRef.current
     }
 
-    return () => {
-      if (engineRef.current) {
-        // Clean up Three.js resources here
-        window.budEngine = undefined
-        engineRef.current = null
-      }
-    }
+    // No cleanup needed - we want to keep the engine instance
   }, [])
 
   const handleUpdateAttributes = (id: string, attributes: { color?: string }) => {
@@ -48,12 +42,26 @@ function App() {
     engineRef.current.updateBoneAttributes(id, attributes)
   }
 
+  const handleGrowStem = (id: string) => {
+    if (!engineRef.current) return
+    console.log('App: Growing stem', { id })
+    engineRef.current.growStemPart(id)
+  }
+
+  const handleShrinkStem = (id: string) => {
+    if (!engineRef.current) return
+    console.log('App: Shrinking stem', { id })
+    engineRef.current.shrinkStemPart(id)
+  }
+
   return (
     <div className="app">
       <div ref={containerRef} className="canvas-container" />
       <EditPanel 
         selectedPart={selectedPart}
-        onUpdateAttributes={handleUpdateAttributes} 
+        onUpdateAttributes={handleUpdateAttributes}
+        onGrowStem={handleGrowStem}
+        onShrinkStem={handleShrinkStem}
       />
       <Status />
     </div>
