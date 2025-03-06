@@ -816,31 +816,30 @@ export class BudEngine {
       const bone = this.bones.get(boneId)
       if (!bone) continue
 
-      // Calculate bone's local transform
-      const localTransform = new THREE.Matrix4()
+      // First rotate current transform by bone's direction
+      const rotMatrix = new THREE.Matrix4()
       const worldUp = new THREE.Vector3(0, 1, 0)
       
-      // Create rotation matrix from bone's direction
       if (Math.abs(bone.direction.dot(worldUp)) < 0.99) {
         const right = new THREE.Vector3().crossVectors(worldUp, bone.direction).normalize()
         const forward = new THREE.Vector3().crossVectors(bone.direction, right).normalize()
-        localTransform.makeBasis(right, bone.direction, forward)
+        rotMatrix.makeBasis(right, bone.direction, forward)
       } else {
         const right = new THREE.Vector3(1, 0, 0)
         const forward = new THREE.Vector3(0, 0, 1)
-        localTransform.makeBasis(right, bone.direction, forward)
+        rotMatrix.makeBasis(right, bone.direction, forward)
       }
 
       // Apply twist if any
       if (bone.twist !== 0) {
         const twistMatrix = new THREE.Matrix4().makeRotationAxis(bone.direction, bone.twist)
-        localTransform.multiply(twistMatrix)
+        rotMatrix.multiply(twistMatrix)
       }
 
-      // Apply current world transform
-      const worldTransform = currentTransform.clone().multiply(localTransform)
+      // Apply rotation to current transform
+      const worldTransform = currentTransform.clone().multiply(rotMatrix)
 
-      // Create mesh for this bone
+      // Create mesh for this bone at current position with new rotation
       let geometry: THREE.BufferGeometry
       let material: THREE.Material
       
@@ -895,8 +894,8 @@ export class BudEngine {
       
       // Orient mesh exactly like debug plane
       mesh.quaternion.setFromUnitVectors(
-        new THREE.Vector3(0, 1, 0),
-        up
+        new THREE.Vector3(0, 1, 0), // Plane's default normal
+        up // Orient to match up vector
       )
 
       // Add to part group
@@ -905,97 +904,22 @@ export class BudEngine {
       // Add debug visualization if debug mode is on
       if (this.debugMode) {
         const boneStart = new THREE.Vector3().setFromMatrixPosition(worldTransform)
-        const boneUp = new THREE.Vector3(0, 1, 0).applyMatrix4(worldTransform).normalize()
-        
-        // Calculate boneRight as perpendicular to boneUp and world forward
-        const worldForward = new THREE.Vector3(0, 0, 1)
-        const boneRight = new THREE.Vector3().crossVectors(worldForward, boneUp).normalize()
-        
-        // Calculate boneForward to complete orthonormal basis
-        const boneForward = new THREE.Vector3().crossVectors(boneUp, boneRight).normalize()
-
-        // Debug vectors with custom materials
-        const arrowMat1 = new THREE.LineBasicMaterial({
-          color: 0xff0000,
-          depthTest: false,
-          transparent: true,
-          opacity: 0.8
-        })
-        const arrowMat2 = new THREE.LineBasicMaterial({
+        const arrowMat = new THREE.LineBasicMaterial({
           color: 0xffff00,
           depthTest: false,
           transparent: true,
           opacity: 0.8
         })
-        const arrowMat3 = new THREE.LineBasicMaterial({
-          color: 0x0000ff,
-          depthTest: false,
-          transparent: true,
-          opacity: 0.8
-        })
-
-        // Create arrow helpers showing bone's transform
-        // Red = right, Green = up, Blue = forward
-        // const arrowHelper1 = new THREE.ArrowHelper(
-        //   boneRight,
-        //   boneStart,
-        //   bone.width,
-        //   0xff0000
-        // )
-        // arrowHelper1.line.material = arrowMat1
-        // arrowHelper1.cone.material = arrowMat1
-        // arrowHelper1.userData.isDebug = true
-        // arrowHelper1.renderOrder = 999
-        // partGroup.add(arrowHelper1)
-
-        // // Add negative right arrow (red)
-        // const arrowHelper1Neg = new THREE.ArrowHelper(
-        //   boneRight.clone().negate(),
-        //   boneStart,
-        //   bone.width,
-        //   0xff0000
-        // )
-        // arrowHelper1Neg.line.material = arrowMat1
-        // arrowHelper1Neg.cone.material = arrowMat1
-        // arrowHelper1Neg.userData.isDebug = true
-        // arrowHelper1Neg.renderOrder = 999
-        // partGroup.add(arrowHelper1Neg)
-
-        const arrowHelper2 = new THREE.ArrowHelper(
-          boneUp,
+        const arrowHelper = new THREE.ArrowHelper(
+          up,
           boneStart,
           bone.length,
         )
-        arrowHelper2.line.material = arrowMat2
-        arrowHelper2.cone.material = arrowMat2
-        arrowHelper2.userData.isDebug = true
-        arrowHelper2.renderOrder = 999
-        partGroup.add(arrowHelper2)
-
-        // const arrowHelper3 = new THREE.ArrowHelper(
-        //   boneForward,
-        //   boneStart,
-        //   bone.width,
-        //   0x0000ff
-        // )
-        // arrowHelper3.line.material = arrowMat3
-        // arrowHelper3.cone.material = arrowMat3
-        // arrowHelper3.userData.isDebug = true
-        // arrowHelper3.renderOrder = 999
-        // partGroup.add(arrowHelper3)
-
-        // // Add negative forward arrow (blue)
-        // const arrowHelper3Neg = new THREE.ArrowHelper(
-        //   boneForward.clone().negate(),
-        //   boneStart,
-        //   bone.width,
-        //   0x0000ff
-        // )
-        // arrowHelper3Neg.line.material = arrowMat3
-        // arrowHelper3Neg.cone.material = arrowMat3
-        // arrowHelper3Neg.userData.isDebug = true
-        // arrowHelper3Neg.renderOrder = 999
-        // partGroup.add(arrowHelper3Neg)
+        arrowHelper.line.material = arrowMat
+        arrowHelper.cone.material = arrowMat
+        arrowHelper.userData.isDebug = true
+        arrowHelper.renderOrder = 999
+        partGroup.add(arrowHelper)
       }
 
       // Process child parts
@@ -1005,11 +929,10 @@ export class BudEngine {
         
         // Get bone start position and direction in world space
         const boneStart = new THREE.Vector3().setFromMatrixPosition(boneTransform)
-        const boneUp = new THREE.Vector3(0, 1, 0).applyMatrix4(boneTransform).normalize()
         
         // Calculate attachment point along bone
         const attachPoint = boneStart.clone().add(
-          boneUp.multiplyScalar(bone.length * attachment.ratio)
+          up.clone().multiplyScalar(bone.length * attachment.ratio)
         )
         
         // Create unit vector in XZ plane based on angle
@@ -1036,7 +959,7 @@ export class BudEngine {
         const attachmentTransform = new THREE.Matrix4()
         
         // Get parent bone's up direction
-        const parentUp = boneUp.clone().normalize()
+        const parentUp = up.clone().normalize()
         
         // Create child's coordinate system:
         // 1. childUp is the perpOffset direction (perpendicular to parent)
@@ -1145,8 +1068,9 @@ export class BudEngine {
         }
       }
 
-      // Update current transform for next bone in sequence
-      currentTransform = worldTransform
+      // After rendering bone and children, translate current transform forward by bone length
+      const translation = new THREE.Matrix4().makeTranslation(0, bone.length, 0)
+      currentTransform.multiply(rotMatrix).multiply(translation)
     }
   }
 
@@ -1269,8 +1193,8 @@ export class BudEngine {
         
         console.log({ ratio, clampedRatio, degrees: angle * (180 / Math.PI) })
         
-        // Calculate perpendicular direction
-        firstBone.direction.copy(new THREE.Vector3(0, 1, 0))
+        // // Calculate perpendicular direction
+        // firstBone.direction.copy(new THREE.Vector3(0, 1, 0))
         
         // Remove from old parent if exists
         if (part.parentBoneId) {
@@ -1363,16 +1287,16 @@ export class BudEngine {
         // Update body position
         body.transform.position.copy(worldPosition)
         
-        // Default to pointing upward
-        const direction = new THREE.Vector3(0, 1, 0)
+        // // Default to pointing upward
+        // const direction = new THREE.Vector3(0, 1, 0)
         
-        // Update bone direction
-        firstBone.direction.copy(direction)
+        // // Update bone direction
+        // firstBone.direction.copy(direction)
         
         // Update body transform
-        body.transform.up.copy(direction)
-        body.transform.right.set(1, 0, 0) // Default right vector
-        body.transform.forward.set(0, 0, 1) // Default forward vector
+        // body.transform.up.copy(direction)
+        // body.transform.right.set(1, 0, 0) // Default right vector
+        // body.transform.forward.set(0, 0, 1) // Default forward vector
         
         // Render the updated body
         this.renderBody(body.id)
