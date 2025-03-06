@@ -15,6 +15,8 @@ type SelectedPart = {
   type: PartType
   position: [number, number, number]
   color: string
+  length: number
+  width: number
 } | null
 
 function App() {
@@ -28,7 +30,17 @@ function App() {
     // Only create engine if it doesn't exist
     if (!engineRef.current) {
       engineRef.current = new BudEngine(containerRef.current, {
-        onSelect: (data) => setSelectedPart(data),
+        onSelect: (data) => {
+          if (!data.length || !data.width) return
+          setSelectedPart({
+            id: data.id,
+            type: data.type,
+            position: data.position,
+            color: data.color || '',
+            length: data.length,
+            width: data.width
+          })
+        },
         onDeselect: () => setSelectedPart(null)
       })
       window.budEngine = engineRef.current
@@ -37,9 +49,20 @@ function App() {
     // No cleanup needed - we want to keep the engine instance
   }, [])
 
-  const handleUpdateAttributes = (id: string, attributes: { color?: string }) => {
+  const handleUpdateAttributes = (id: string, attributes: { color?: string, length?: number, width?: number }) => {
     if (!engineRef.current) return
     engineRef.current.updateBoneAttributes(id, attributes)
+    
+    // Update selectedPart state with new attributes
+    setSelectedPart(prev => {
+      if (!prev || prev.id !== id) return prev
+      return {
+        ...prev,
+        ...attributes,
+        // Handle special case for clearing color
+        color: attributes.color === 'none' ? '' : (attributes.color || prev.color)
+      }
+    })
   }
 
   const handleGrowStem = (id: string) => {
