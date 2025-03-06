@@ -1,6 +1,7 @@
-import { useEffect, useRef } from 'react'
-import { BudEngine } from './engine/BudEngine'
+import { useEffect, useRef, useState } from 'react'
+import { BudEngine, PartType } from './engine/BudEngine'
 import { EditPanel } from './components/EditPanel'
+import { Status } from './components/Status'
 import './App.css'
 
 declare global {
@@ -9,30 +10,52 @@ declare global {
   }
 }
 
+type SelectedPart = {
+  id: string
+  type: PartType
+  position: [number, number, number]
+  color: string
+} | null
+
 function App() {
   const containerRef = useRef<HTMLDivElement>(null)
+  const engineRef = useRef<BudEngine | null>(null)
+  const [selectedPart, setSelectedPart] = useState<SelectedPart>(null)
 
   useEffect(() => {
     if (!containerRef.current) return
-
-    const engine = new BudEngine(containerRef.current)
-    window.budEngine = engine
+    
+    // Only create engine if it doesn't exist
+    if (!engineRef.current) {
+      engineRef.current = new BudEngine(containerRef.current, {
+        onSelect: (data) => setSelectedPart(data),
+        onDeselect: () => setSelectedPart(null)
+      })
+      window.budEngine = engineRef.current
+    }
 
     return () => {
-      window.budEngine = undefined
-      // Clean up Three.js resources
+      if (engineRef.current) {
+        // Clean up Three.js resources here
+        window.budEngine = undefined
+        engineRef.current = null
+      }
     }
   }, [])
 
   const handleUpdateAttributes = (id: string, attributes: { color?: string }) => {
-    if (!window.budEngine) return
-    window.budEngine.updateBoneAttributes(id, attributes)
+    if (!engineRef.current) return
+    engineRef.current.updateBoneAttributes(id, attributes)
   }
 
   return (
     <div className="app">
       <div ref={containerRef} className="canvas-container" />
-      <EditPanel onUpdateAttributes={handleUpdateAttributes} />
+      <EditPanel 
+        selectedPart={selectedPart}
+        onUpdateAttributes={handleUpdateAttributes} 
+      />
+      <Status />
     </div>
   )
 }
