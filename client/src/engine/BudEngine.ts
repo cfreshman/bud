@@ -250,6 +250,11 @@ export class BudEngine {
     
     // Start render loop
     this.animate()
+
+    // Load saved plant state after everything is set up
+    requestAnimationFrame(() => {
+      this.loadFromLocalStorage()
+    })
   }
 
   private setupPotAndDirt() {
@@ -352,7 +357,7 @@ export class BudEngine {
   }
 
   private createPartPreview(type: PartType, color: string): THREE.Mesh {
-    const scale = 1.5 // Make preview parts a bit larger
+    const scale = 1
     const geometry = this.createGeometry(type, {
       width: type === 'stem' ? 0.03 * scale : 0.05 * scale,
       length: type === 'stem' ? 0.2 * scale : 0.15 * scale
@@ -1197,7 +1202,7 @@ export class BudEngine {
         // Calculate attachment point on bone
         const attachPoint = boneStart.clone().add(up.clone().multiplyScalar(clampedRatio * boneLength))
         
-        // Calculate vector from attachment point to mouse in bone's local space
+ // Calculate vector from attachment point to mouse in bone's local space
         const toMouse = new THREE.Vector3().subVectors(worldPosition, attachPoint)
         
         // Create inverse rotation matrix to transform toMouse into bone's local space
@@ -1253,6 +1258,7 @@ export class BudEngine {
             this.outlinePass.selectedObjects = [newPartGroup]
             this.composer.render()
           }
+          this.saveToLocalStorage() // Save after attaching to another part
         }
       }
     } else {
@@ -1284,16 +1290,13 @@ export class BudEngine {
         }
       }
       
-      // Update bone direction and position
-      const body = Array.from(this.bodies.values())
-        .find(b => b.rootPartId === part.id)
-      
-      if (body) {
-        // Update body position
-        body.transform.position.copy(worldPosition)
+      // Update body position
+      if (activeBody) {
+        activeBody.transform.position.copy(worldPosition)
         
         // Render the updated body
-        this.renderBody(body.id)
+        this.renderBody(activeBody.id)
+        this.saveToLocalStorage() // Save after position change
       }
     }
   }
@@ -1425,6 +1428,7 @@ export class BudEngine {
         this.composer.render()
       }
     }
+    this.saveToLocalStorage() // Save after color change
   }
 
   private addPart(params: {
@@ -1718,7 +1722,7 @@ export class BudEngine {
     }
     
     const newBoneId = this.addBone({
-      partId: part.id,
+      partId,
       position: new THREE.Vector3(), // Position doesn't matter, will be set by transform
       length: firstBone.length,
       width: firstBone.width,
@@ -1746,6 +1750,7 @@ export class BudEngine {
     if (body) {
       console.log('BudEngine: Rendering updated body', { bodyId: body.id })
       this.renderBody(body.id)
+      this.saveToLocalStorage() // Save after growing
     } else {
       console.log('BudEngine: No body found for part', { rootPartId: currentPart.id })
     }
@@ -1802,6 +1807,7 @@ export class BudEngine {
     if (body) {
       console.log('BudEngine: Rendering updated body', { bodyId: body.id })
       this.renderBody(body.id)
+      this.saveToLocalStorage() // Save after shrinking
     } else {
       console.log('BudEngine: No body found for part', { rootPartId: currentPart.id })
     }
@@ -1833,5 +1839,172 @@ export class BudEngine {
     }
     
     return foundGroup
+  }
+
+  // Save current plant state to localStorage
+  private saveToLocalStorage() {
+    try {
+      const serializedPlant = this.serializePlant()
+      localStorage.setItem('bud_plant', serializedPlant)
+      console.log('Plant saved to localStorage')
+    } catch (error) {
+      console.error('Failed to save plant:', error)
+    }
+  }
+
+  // Load plant state from localStorage
+  private loadFromLocalStorage() {
+    try {
+      const savedPlant = localStorage.getItem('bud_plant')
+      if (savedPlant) {
+        this.loadPlant(savedPlant)
+        console.log('Plant loaded from localStorage')
+      }
+    } catch (error) {
+      console.error('Failed to load plant:', error)
+    }
+  }
+
+  // Serialize just the root parts and their hierarchies
+  serializePlant(): string {
+    const rootData = Array.from(this.roots).map(rootId => {
+      const body = Array.from(this.bodies.values()).find(b => b.rootPartId === rootId)
+      return {
+        partData: this.serializePart(rootId),
+        transform: body ? {
+          position: body.transform.position.toArray(),
+          up: body.transform.up.toArray(),
+          right: body.transform.right.toArray(),
+          forward: body.transform.forward.toArray()
+        } : undefined
+      }
+    })
+    return JSON.stringify(rootData)
+  }
+
+  private serializePart(partId: string): any {
+    const part = this.parts.get(partId)
+    if (!part) return null
+
+    const bones = part.boneIds.map(boneId => {
+      const bone = this.bones.get(boneId)
+      if (!bone) return null
+
+      // Get all child parts of this bone
+      const children = Array.from(bone.children.entries()).map(([childId, attachment]) => {
+        const childData = this.serializePart(childId)
+        if (!childData) return null
+        return {
+          attachment,
+          part: childData
+        }
+      }).filter(x => x !== null)
+
+      return {
+        length: bone.length,
+        width: bone.width,
+        isHead: bone.isHead,
+        children
+      }
+    })
+
+    return {
+      type: part.type,
+      color: part.color ? `#${part.color.getHexString()}` : undefined,
+      bones
+    }
+  }
+
+  // Load a serialized plant
+  loadPlant(serializedData: string) {
+    // Clear current state
+    this.clearPlant()
+    
+    const rootData = JSON.parse(serializedData)
+    rootData.forEach((data: any) => {
+      const rootId = this.loadPartData(data.partData)
+      if (rootId) {
+        this.roots.add(rootId)
+        
+        // If we have transform data, apply it to the body
+        if (data.transform) {
+          const body = Array.from(this.bodies.values()).find(b => b.rootPartId === rootId)
+          if (body) {
+            body.transform.position.fromArray(data.transform.position)
+            body.transform.up.fromArray(data.transform.up)
+            body.transform.right.fromArray(data.transform.right)
+            body.transform.forward.fromArray(data.transform.forward)
+          }
+        }
+      }
+    })
+
+    // Force re-render all root parts
+    Array.from(this.roots).forEach(rootId => {
+      const body = Array.from(this.bodies.values()).find(b => b.rootPartId === rootId)
+      if (body) {
+        this.renderBody(body.id)
+      }
+    })
+
+    // Force a render to show everything
+    this.composer.render()
+  }
+
+  private loadPartData(partData: any, parentBoneId?: string): string | null {
+    // Create the part
+    const partId = Math.random().toString(36).substr(2, 9)
+    const part: Part = {
+      id: partId,
+      type: partData.type,
+      boneIds: [],
+      parentBoneId
+    }
+
+    if (partData.color) {
+      part.color = new THREE.Color(partData.color)
+    }
+
+    // Create bones
+    partData.bones.forEach((boneData: any, index: number) => {
+      const boneId = this.addBone({
+        partId,
+        position: new THREE.Vector3(), // Will be set by transform
+        length: boneData.length,
+        width: boneData.width,
+        isHead: boneData.isHead
+      })
+      part.boneIds.push(boneId)
+
+      // Process children
+      const bone = this.bones.get(boneId)
+      if (bone) {
+        boneData.children.forEach((childData: any) => {
+          const childId = this.loadPartData(childData.part, boneId)
+          if (childId) {
+            bone.children.set(childId, childData.attachment)
+          }
+        })
+      }
+    })
+
+    this.parts.set(partId, part)
+
+    // If this is a root part, create a body for it
+    if (!parentBoneId) {
+      this.createBodyForPart(partId)
+    }
+
+    return partId
+  }
+
+  // Clear the current plant
+  clearPlant() {
+    this.bodies.clear()
+    this.parts.clear()
+    this.bones.clear()
+    this.roots.clear()
+    this.partParentIds.clear()
+    this.composer.render()
   }
 } 
