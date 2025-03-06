@@ -674,9 +674,7 @@ export class BudEngine {
       // Find the new group for the selected part
       const selectedPartId = selectedObjects[0].userData.partId
       if (selectedPartId) {
-        const newGroup = this.scene.children.find(child =>
-          child instanceof THREE.Group && child.userData.partId === selectedPartId
-        )
+        const newGroup = this.findPartGroup(selectedPartId)
         if (newGroup) {
           this.outlinePass.selectedObjects = [newGroup]
         }
@@ -1237,24 +1235,10 @@ export class BudEngine {
           this.renderBody(rootPart.id)
           
           // After rendering, find the new group for our selected part
-          const newPartGroup = this.scene.children.find(child => 
-            child instanceof THREE.Group && child.userData.partId === selectedPartId
-          )
+          const newPartGroup = this.findPartGroup(selectedPartId)
           if (newPartGroup) {
             this.outlinePass.selectedObjects = [newPartGroup]
             this.composer.render()
-          } else {
-            // If not found at root level, search entire scene
-            let foundGroup: THREE.Group | null = null
-            this.scene.traverse(child => {
-              if (child instanceof THREE.Group && child.userData.partId === selectedPartId) {
-                foundGroup = child
-              }
-            })
-            if (foundGroup) {
-              this.outlinePass.selectedObjects = [foundGroup]
-              this.composer.render()
-            }
           }
         }
       }
@@ -1280,9 +1264,7 @@ export class BudEngine {
         this.renderBody(part.id)
         
         // After rendering, find the new group for our selected part
-        const newPartGroup = this.scene.children.find(child => 
-          child instanceof THREE.Group && child.userData.partId === selectedPartId
-        )
+        const newPartGroup = this.findPartGroup(selectedPartId)
         if (newPartGroup) {
           this.outlinePass.selectedObjects = [newPartGroup]
           this.composer.render()
@@ -1808,5 +1790,26 @@ export class BudEngine {
     const wasAdded = this.partAdded
     this.partAdded = false
     return wasAdded
+  }
+
+  // Add this helper method to find part groups anywhere in the scene
+  private findPartGroup(partId: string): THREE.Group | null {
+    let foundGroup: THREE.Group | null = null
+    
+    // First try root level for performance
+    foundGroup = this.scene.children.find(child => 
+      child instanceof THREE.Group && child.userData.partId === partId
+    ) as THREE.Group | null
+    
+    // If not found at root, search entire scene hierarchy
+    if (!foundGroup) {
+      this.scene.traverse(child => {
+        if (child instanceof THREE.Group && child.userData.partId === partId) {
+          foundGroup = child
+        }
+      })
+    }
+    
+    return foundGroup
   }
 } 
