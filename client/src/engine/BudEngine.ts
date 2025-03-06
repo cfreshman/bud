@@ -69,6 +69,7 @@ export class BudEngine {
   private parts: Map<string, Part> = new Map()
   private bones: Map<string, Bone> = new Map()
   private roots: Set<string> = new Set() // Track root part IDs
+  private partParentIds: Map<string, Set<string>> = new Map() // Track parent IDs for each part
   private scene: THREE.Scene
   private uiScene: THREE.Scene  // Separate scene for UI elements
   private camera: THREE.PerspectiveCamera
@@ -98,6 +99,7 @@ export class BudEngine {
   private mouseDown = false
   private onSelect?: (data: { id: string, type: PartType, position: [number, number, number], color: string }) => void
   private onDeselect?: () => void
+  private debugMode: boolean = true  // Add debug flag
   
   constructor(container: HTMLElement, callbacks?: { 
     onSelect?: (data: { id: string, type: PartType, position: [number, number, number], color: string }) => void
@@ -516,7 +518,7 @@ export class BudEngine {
       if (this.mainDirt) validSurfaces.push(this.mainDirt)
       validSurfaces.push(...Array.from(this.partPots.values()))
 
-      // Add stem meshes that aren't part of the active part
+      // Add stem meshes that aren't part of the active part's hierarchy
       const activePart = this.parts.get(this.activePartId)
       if (activePart) {
         validSurfaces.push(...this.scene.children.filter(child => {
@@ -617,11 +619,12 @@ export class BudEngine {
     // 2. Ground plane (isGround)
     // 3. Part previews (isPartPreview)
     // 4. Part pots and dirt
+    // 5. Debug spheres
     const groupsToRemove = this.scene.children.filter(child => {
       // Keep non-group objects
       if (!(child instanceof THREE.Group)) {
-        // Keep ground plane and previews
-        if (child.userData.isGround || child.userData.isPartPreview) return false
+        // Keep ground plane, previews, and debug spheres
+        if (child.userData.isGround || child.userData.isPartPreview || child.userData.isDebug) return false
         
         // Keep main pot and dirt if they're meshes
         if (child instanceof THREE.Mesh) {
@@ -677,37 +680,6 @@ export class BudEngine {
     this.composer.render()
   }
 
-  private getEndPoint(bone: Bone, startPoint: THREE.Vector3): THREE.Vector3 {
-    return startPoint.clone().add(bone.direction.clone().multiplyScalar(bone.length))
-  }
-
-  private getBoneTransform(bone: Bone, startPoint: THREE.Vector3): THREE.Matrix4 {
-    // Create a rotation matrix that aligns the up vector with bone direction
-    const rotMatrix = new THREE.Matrix4()
-    const up = new THREE.Vector3(0, 1, 0)
-    
-    // If direction is not exactly up/down, use cross product
-    if (Math.abs(bone.direction.dot(up)) < 0.99) {
-      const right = new THREE.Vector3().crossVectors(up, bone.direction).normalize()
-      const forward = new THREE.Vector3().crossVectors(bone.direction, right)
-      rotMatrix.makeBasis(right, bone.direction, forward)
-    } else {
-      // Special case for vertical bones
-      const right = new THREE.Vector3(1, 0, 0)
-      const forward = new THREE.Vector3(0, 0, 1)
-      rotMatrix.makeBasis(right, bone.direction, forward)
-    }
-
-    // Apply twist rotation around direction vector
-    const twistMatrix = new THREE.Matrix4().makeRotationAxis(bone.direction, bone.twist)
-    rotMatrix.multiply(twistMatrix)
-
-    // Set position
-    rotMatrix.setPosition(startPoint)
-
-    return rotMatrix
-  }
-
   private cleanupMeshes(currentPartId: string) {
     const currentPart = this.parts.get(currentPartId)
     if (!currentPart) return
@@ -757,9 +729,21 @@ export class BudEngine {
     this.renderPartHierarchy(body.rootPartId, worldTransform)
   }
 
-  private renderPartHierarchy(partId: string, parentWorldTransform: THREE.Matrix4, parentGroup?: THREE.Group) {
+  private renderPartHierarchy(
+    partId: string, 
+    parentWorldTransform: THREE.Matrix4, 
+    parentGroup?: THREE.Group,
+    parentPartIds: Set<string> = new Set()
+  ) {
     const part = this.parts.get(partId)
     if (!part) return
+
+    // Add current part to parent IDs for children
+    const currentParentIds = new Set(parentPartIds)
+    currentParentIds.add(partId)
+    
+    // Store parent IDs for this part
+    this.partParentIds.set(partId, currentParentIds)
 
     // Find the body this part belongs to
     const body = Array.from(this.bodies.values()).find(b => {
@@ -835,18 +819,87 @@ export class BudEngine {
       mesh.frustumCulled = false
       mesh.userData.boneId = boneId
       mesh.userData.bodyId = body.id
+      mesh.userData.partId = partId
+      mesh.userData.parentPartIds = Array.from(currentParentIds)
 
       // Position and rotate mesh
-      mesh.position.setFromMatrixPosition(currentTransform)
-      mesh.setRotationFromMatrix(currentTransform)
+      const worldTransform = this.getWorldTransformForBone(bone)
+      mesh.position.setFromMatrixPosition(worldTransform)
+      mesh.setRotationFromMatrix(worldTransform)
 
       // Add to part group
       partGroup.add(mesh)
 
+      // Add debug visualization if debug mode is on
+      if (this.debugMode) {
+        const boneStart = new THREE.Vector3().setFromMatrixPosition(worldTransform)
+        const boneRight = new THREE.Vector3(1, 0, 0).applyMatrix4(worldTransform).normalize()
+        const boneUp = new THREE.Vector3(0, 1, 0).applyMatrix4(worldTransform).normalize()
+        const boneForward = new THREE.Vector3(0, 0, 1).applyMatrix4(worldTransform).normalize()
+
+        // Debug vectors with custom materials
+        const arrowMat1 = new THREE.LineBasicMaterial({
+          color: 0xff0000,
+          depthTest: false,
+          transparent: true,
+          opacity: 0.8
+        })
+        const arrowMat2 = new THREE.LineBasicMaterial({
+          color: 0x00ff00,
+          depthTest: false,
+          transparent: true,
+          opacity: 0.8
+        })
+        const arrowMat3 = new THREE.LineBasicMaterial({
+          color: 0x0000ff,
+          depthTest: false,
+          transparent: true,
+          opacity: 0.8
+        })
+
+        // Create arrow helpers showing bone's transform
+        // Red = right, Green = up, Blue = forward
+        const arrowHelper1 = new THREE.ArrowHelper(
+          boneRight,
+          boneStart,
+          0.2,
+          0xff0000
+        )
+        arrowHelper1.line.material = arrowMat1
+        arrowHelper1.cone.material = arrowMat1
+        arrowHelper1.userData.isDebug = true
+        arrowHelper1.renderOrder = 999
+        partGroup.add(arrowHelper1)
+
+        const arrowHelper2 = new THREE.ArrowHelper(
+          boneUp,
+          boneStart,
+          bone.length,
+          0x00ff00
+        )
+        arrowHelper2.line.material = arrowMat2
+        arrowHelper2.cone.material = arrowMat2
+        arrowHelper2.userData.isDebug = true
+        arrowHelper2.renderOrder = 999
+        partGroup.add(arrowHelper2)
+
+        const arrowHelper3 = new THREE.ArrowHelper(
+          boneForward,
+          boneStart,
+          0.2,
+          0x0000ff
+        )
+        arrowHelper3.line.material = arrowMat3
+        arrowHelper3.cone.material = arrowMat3
+        arrowHelper3.userData.isDebug = true
+        arrowHelper3.renderOrder = 999
+        partGroup.add(arrowHelper3)
+      }
+
       // Process child parts
       for (const [childPartId, attachment] of bone.children.entries()) {
-        const attachmentPoint = currentTransform.clone()
-        const boneDirection = new THREE.Vector3(0, 1, 0).applyMatrix4(currentTransform)
+        const attachmentPoint = worldTransform.clone()
+        const boneDirection = new THREE.Vector3(0, 1, 0).applyMatrix4(worldTransform)
         
         const offset = boneDirection.multiplyScalar(bone.length * attachment.ratio)
         attachmentPoint.setPosition(mesh.position.clone().add(offset))
@@ -854,13 +907,12 @@ export class BudEngine {
         const rotationMatrix = new THREE.Matrix4().makeRotationAxis(boneDirection.normalize(), attachment.angle)
         attachmentPoint.multiply(rotationMatrix)
         
-        // Pass the current partGroup as the parent for the child
-        this.renderPartHierarchy(childPartId, attachmentPoint, partGroup)
+        // Pass the current partGroup as the parent for the child, along with updated parent IDs
+        this.renderPartHierarchy(childPartId, attachmentPoint, partGroup, currentParentIds)
       }
 
-      // Update transform for next bone
-      const boneTransform = this.getBoneTransform(bone, mesh.position)
-      currentTransform.multiply(boneTransform)
+      // Update transform for next bone in sequence
+      currentTransform = worldTransform
     }
   }
 
@@ -879,26 +931,36 @@ export class BudEngine {
     // Check if we're hovering over a stem bone
     this.raycaster.setFromCamera(this.mouse, this.camera)
     
-    // Get all stem meshes from scene, excluding meshes from the active body
-    const stemMeshes = this.scene.children.filter(child => {
-      if (!(child instanceof THREE.Mesh)) return false
+    // Get all stem meshes from scene, excluding meshes from the active part's hierarchy
+    const stemMeshes: THREE.Mesh[] = []
+    
+    this.scene.traverse(child => {
+      if (!(child instanceof THREE.Mesh)) return
       
-      // Must have a boneId and bodyId to be a plant part
-      if (!child.userData.boneId || !child.userData.bodyId) return false
+      // Must have a boneId to be a plant part
+      if (!child.userData.boneId) return
       
-      // Skip if mesh belongs to active body
-      if (child.userData.bodyId === activeBody.id) return false
+      // Skip if mesh belongs to active part or its parents
+      const meshPartId = child.userData.partId
+      if (!meshPartId) return
+
+      const parentIds = this.partParentIds.get(meshPartId)
+      if (parentIds?.has(part.id)) return
       
-      // Find corresponding bone
+      // Find corresponding bone and part
       const bone = this.bones.get(child.userData.boneId)
-      if (!bone) return false
-      
-      // Check if it's a stem
+      if (!bone) return
       const bonePart = this.parts.get(bone.partId)
-      return bonePart?.type === 'stem'
+      if (!bonePart) return
+      
+      // Only allow attaching to stems
+      if (bonePart.type === 'stem') {
+        stemMeshes.push(child)
+      }
     })
     
     const boneIntersects = this.raycaster.intersectObjects(stemMeshes)
+    console.log(boneIntersects)
     
     if (boneIntersects.length > 0) {
       const hitMesh = boneIntersects[0].object
@@ -913,21 +975,48 @@ export class BudEngine {
         // Remove from roots since it's getting a parent
         this.roots.delete(part.id)
 
-        // Calculate ratio and angle
-        const parentEnd = this.getEndPoint(parentBone, this.plantingArea)
-        const parentVector = new THREE.Vector3().subVectors(parentEnd, parentBone.direction.clone().multiplyScalar(parentBone.length))
+        // Get world transform for parent bone
+        const boneTransform = this.getWorldTransformForBone(parentBone)
+        const boneStart = new THREE.Vector3().setFromMatrixPosition(boneTransform)
+        const boneUp = new THREE.Vector3(0, 1, 0).applyMatrix4(boneTransform).normalize()
+        const boneRight = new THREE.Vector3(1, 0, 0).applyMatrix4(boneTransform).normalize()
+        const boneForward = new THREE.Vector3(0, 0, 1).applyMatrix4(boneTransform).normalize()
+        const boneLength = parentBone.length
+        
+        // Calculate ratio along parent bone using world space positions
         const hitPoint = boneIntersects[0].point
-        const hitOffset = new THREE.Vector3().subVectors(hitPoint, parentBone.direction.clone().multiplyScalar(parentBone.length))
-        const ratio = hitOffset.dot(parentVector.normalize()) / parentVector.length()
+        
+        // Project hit point onto bone line to get closest point
+        const toHit = new THREE.Vector3().subVectors(hitPoint, boneStart)
+        const projectedDistance = toHit.dot(boneUp)
+        const ratio = projectedDistance / boneLength
         const clampedRatio = Math.max(0, Math.min(1, ratio))
         
-        const perpendicular = new THREE.Vector3().crossVectors(parentVector, new THREE.Vector3(0, 1, 0)).normalize()
-        const hitDirection = new THREE.Vector3().subVectors(worldPosition, hitPoint).normalize()
-        const angle = Math.atan2(
-          hitDirection.dot(new THREE.Vector3().crossVectors(parentVector, perpendicular)),
-          hitDirection.dot(perpendicular)
-        )
+        // Calculate attachment point on bone
+        const attachPoint = boneStart.clone().add(boneUp.clone().multiplyScalar(clampedRatio * boneLength))
+        
+        // Calculate vector from attachment point to mouse in bone's local space
+        const toMouse = new THREE.Vector3().subVectors(worldPosition, attachPoint)
+        const projectedToMouse = new THREE.Vector3(
+          toMouse.dot(boneRight),
+          0, // Ignore component along bone
+          toMouse.dot(boneForward)
+        ).normalize()
+        
+        // Calculate angle in bone's local space (in XZ plane)
+        const angle = Math.atan2(projectedToMouse.z, projectedToMouse.x)
 
+        console.log({ ratio, clampedRatio, degrees: angle * (180 / Math.PI) })
+        
+        // Calculate perpendicular direction based on angle
+        const perpDirection = new THREE.Vector3()
+          .addScaledVector(boneRight, Math.cos(angle))
+          .addScaledVector(boneForward, Math.sin(angle))
+          .normalize()
+        
+        // Set direction perpendicular to bone
+        firstBone.direction.copy(perpDirection)
+        
         // Remove from old parent if exists
         if (part.parentBoneId) {
           const oldParentBone = this.bones.get(part.parentBoneId)
@@ -985,7 +1074,7 @@ export class BudEngine {
         // Update body position
         body.transform.position.copy(worldPosition)
         
-        // Default to pointing upward instead of away from planting area
+        // Default to pointing upward
         const direction = new THREE.Vector3(0, 1, 0)
         
         // Update bone direction
@@ -1030,124 +1119,6 @@ export class BudEngine {
 
     this.bones.set(id, bone)
     return id
-  }
-
-  private createBoneMesh(bone: Bone): THREE.Mesh {
-    let geometry: THREE.BufferGeometry
-    let material: THREE.Material
-    
-    const part = this.parts.get(bone.partId)
-    if (!part) return new THREE.Mesh()
-    
-    switch (part.type) {
-      case 'stem':
-        geometry = new THREE.CylinderGeometry(bone.width, bone.width, bone.length, 8)
-        // Move origin to bottom
-        geometry.translate(0, bone.length / 2, 0)
-        material = new THREE.MeshStandardMaterial({ 
-          color: part.color || '#44aa44',
-          transparent: false,
-          opacity: 1,
-          visible: true
-        })
-        break
-      case 'leaf':
-        geometry = new THREE.CircleGeometry(bone.width * 4, 16)
-        // Move origin to bottom center of leaf
-        geometry.translate(0, bone.width * 4, 0)
-        material = new THREE.MeshStandardMaterial({ 
-          color: part.color || '#66cc66',
-          side: THREE.DoubleSide,
-          transparent: false,
-          opacity: 1,
-          visible: true
-        })
-        break
-      case 'thorn':
-        geometry = new THREE.ConeGeometry(bone.width * 2, bone.length, 4)
-        // Move origin to bottom of cone
-        geometry.translate(0, bone.length / 2, 0)
-        material = new THREE.MeshStandardMaterial({ 
-          color: part.color || '#aa4444',
-          transparent: false,
-          opacity: 1,
-          visible: true
-        })
-        break
-      case 'flower':
-        geometry = new THREE.SphereGeometry(bone.width * 3, 8, 8)
-        // Move origin to bottom of sphere
-        geometry.translate(0, bone.width * 3, 0)
-        material = new THREE.MeshStandardMaterial({ 
-          color: part.color || '#cc66cc',
-          transparent: false,
-          opacity: 1,
-          visible: true
-        })
-        break
-    }
-
-    const mesh = new THREE.Mesh(geometry, material)
-    mesh.castShadow = true
-    mesh.receiveShadow = true
-    mesh.visible = true
-    mesh.frustumCulled = false
-
-    mesh.position.copy(bone.direction.clone().multiplyScalar(bone.length))
-    const boneTransform = this.getBoneTransform(bone, mesh.position)
-    mesh.setRotationFromMatrix(boneTransform)
-
-    return mesh
-  }
-
-  private createPartMesh(type: PartType, position: THREE.Vector3): THREE.Mesh {
-    let geometry: THREE.BufferGeometry
-    let material: THREE.Material
-    const scale = 1.5 // Match preview scale
-    
-    switch (type) {
-      case 'stem':
-        geometry = new THREE.CylinderGeometry(0.03 * scale, 0.03 * scale, 0.2 * scale, 8)
-        material = new THREE.MeshStandardMaterial({ color: '#44aa44' })
-        break
-      case 'leaf':
-        geometry = new THREE.CircleGeometry(0.12 * scale, 16)
-        // Translate geometry up by half its height so bottom is at origin
-        geometry.translate(0, 0.2 * scale / 2, 0)
-        material = new THREE.MeshStandardMaterial({ 
-          color: '#66cc66',
-          side: THREE.DoubleSide
-        })
-        break
-      case 'thorn':
-        geometry = new THREE.ConeGeometry(0.04 * scale, 0.15 * scale, 4)
-        // Translate geometry up by half its height so bottom is at origin
-        geometry.translate(0, 0.15 * scale / 2, 0)
-        material = new THREE.MeshStandardMaterial({ color: '#aa4444' })
-        break
-      case 'flower':
-        geometry = new THREE.SphereGeometry(0.08 * scale, 8, 8)
-        // Translate geometry up by its radius so bottom is at origin
-        geometry.translate(0, 0.08 * scale, 0)
-        material = new THREE.MeshStandardMaterial({ color: '#cc66cc' })
-        break
-      default:
-        throw new Error(`Invalid part type: ${type}`)
-    }
-
-    const mesh = new THREE.Mesh(geometry, material)
-    mesh.castShadow = true
-    mesh.receiveShadow = true
-    
-    // Position mesh at the provided position (which is already the bottom point)
-    mesh.position.copy(position)
-
-    // Set initial rotation
-    if (type === 'leaf') {
-      mesh.rotation.y = Math.PI / 2 // Make leaf vertical
-    }
-
-    return mesh
   }
 
   getBones(): Bone[] {
@@ -1239,15 +1210,6 @@ export class BudEngine {
         this.composer.render()
       }
     }
-  }
-
-  private getPartTypeFromMesh(mesh: THREE.Mesh): PartType {
-    // Determine part type based on geometry
-    const geometry = mesh.geometry
-    if (geometry instanceof THREE.CircleGeometry) return 'leaf'
-    if (geometry instanceof THREE.ConeGeometry) return 'thorn'
-    if (geometry instanceof THREE.SphereGeometry) return 'flower'
-    return 'stem' // Default to stem for cylinder geometry
   }
 
   private addPart(params: {
@@ -1400,25 +1362,93 @@ export class BudEngine {
     const part = this.parts.get(bone.partId)
     if (!part) return new THREE.Matrix4()
 
-    // Get world transform by walking up parent chain
-    let currentTransform = new THREE.Matrix4()
-    let currentPart = part
-    let currentBone = bone
-
-    while (currentPart) {
-      const boneTransform = this.getBoneTransform(currentBone, new THREE.Vector3())
-      currentTransform.premultiply(boneTransform)
-
-      if (!currentPart.parentBoneId) break
-      
-      const parentBone = this.bones.get(currentPart.parentBoneId)
+    // Find the root part by walking up the chain
+    let rootPart = part
+    while (rootPart.parentBoneId) {
+      const parentBone = this.bones.get(rootPart.parentBoneId)
       if (!parentBone) break
-      
-      const parentPart = this.parts.get(parentBone.partId)
-      if (!parentPart) break
+      const nextPart = this.parts.get(parentBone.partId)
+      if (!nextPart) break
+      rootPart = nextPart
+    }
 
-      currentPart = parentPart
-      currentBone = parentBone
+    // Get the root part's body transform
+    const body = Array.from(this.bodies.values()).find(b => b.rootPartId === rootPart.id)
+    let rootTransform;
+    if (body) {
+      rootTransform = new THREE.Matrix4().makeBasis(
+        body.transform.right,
+        body.transform.up,
+        body.transform.forward
+      ).setPosition(body.transform.position)
+    } else {
+      rootTransform = new THREE.Matrix4()
+    }
+
+    // Now recursively calculate transforms from root to target
+    return this.calculateTransformFromRoot(rootPart, bone.id, rootTransform)
+  }
+
+  private calculateTransformFromRoot(part: Part, targetBoneId: string, parentTransform: THREE.Matrix4): THREE.Matrix4 {
+    // Start with parent transform
+    let currentTransform = parentTransform.clone()
+    
+    // Process each bone in this part
+    for (const boneId of part.boneIds) {
+      const bone = this.bones.get(boneId)
+      if (!bone) continue
+
+      // Apply bone's local transform
+      const rotMatrix = new THREE.Matrix4()
+      const worldUp = new THREE.Vector3(0, 1, 0)
+      
+      // Create rotation matrix from bone's direction
+      if (Math.abs(bone.direction.dot(worldUp)) < 0.99) {
+        const right = new THREE.Vector3().crossVectors(worldUp, bone.direction).normalize()
+        const forward = new THREE.Vector3().crossVectors(bone.direction, right).normalize()
+        rotMatrix.makeBasis(right, bone.direction, forward)
+      } else {
+        const right = new THREE.Vector3(1, 0, 0)
+        const forward = new THREE.Vector3(0, 0, 1)
+        rotMatrix.makeBasis(right, bone.direction, forward)
+      }
+
+      // Apply twist
+      if (bone.twist !== 0) {
+        const twistMatrix = new THREE.Matrix4().makeRotationAxis(bone.direction, bone.twist)
+        rotMatrix.multiply(twistMatrix)
+      }
+
+      // Apply to current transform
+      currentTransform.multiply(rotMatrix)
+
+      // If this is our target bone, we're done
+      if (boneId === targetBoneId) {
+        return currentTransform
+      }
+
+      // Check children of this bone
+      for (const [childPartId, attachment] of bone.children.entries()) {
+        const childPart = this.parts.get(childPartId)
+        if (!childPart) continue
+
+        // Create attachment point transform
+        const attachTransform = currentTransform.clone()
+        const boneDirection = new THREE.Vector3(0, 1, 0).applyMatrix4(currentTransform)
+        const offset = boneDirection.multiplyScalar(bone.length * attachment.ratio)
+        
+        // Get current position and add offset
+        const attachPosition = new THREE.Vector3().setFromMatrixPosition(currentTransform).add(offset)
+        attachTransform.setPosition(attachPosition)
+        
+        // Apply attachment angle
+        const rotationMatrix = new THREE.Matrix4().makeRotationAxis(boneDirection.normalize(), attachment.angle)
+        attachTransform.multiply(rotationMatrix)
+
+        // Recursively process child part
+        const result = this.calculateTransformFromRoot(childPart, targetBoneId, attachTransform)
+        if (result) return result
+      }
     }
 
     return currentTransform
