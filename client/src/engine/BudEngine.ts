@@ -904,20 +904,19 @@ export class BudEngine {
         mesh.add(eyeGroup)
       }
 
-      // Position and rotate mesh using world transform
+      // Position mesh using world transform
       mesh.position.setFromMatrixPosition(worldTransform)
       
-      // Extract coordinate system from transform, just like debug plane
+      // Extract coordinate system from transform
       const right = new THREE.Vector3()
       const up = new THREE.Vector3()
       const forward = new THREE.Vector3()
       worldTransform.extractBasis(right, up, forward)
       
-      // Orient mesh exactly like debug plane
-      mesh.quaternion.setFromUnitVectors(
-        new THREE.Vector3(0, 1, 0), // Plane's default normal
-        up // Orient to match up vector
-      )
+      // Orient mesh using full basis instead of just up vector
+      mesh.matrix.makeBasis(right, up, forward)
+      mesh.matrix.setPosition(mesh.position)
+      mesh.matrixAutoUpdate = false
 
       // Add to part group
       partGroup.add(mesh)
