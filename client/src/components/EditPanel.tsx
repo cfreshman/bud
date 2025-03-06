@@ -23,7 +23,7 @@ export function EditPanel({ selectedPart, onUpdateAttributes, onGrowStem, onShri
         <span>{selectedPart.type}</span>
         <input 
           type="color" 
-          value={`#${selectedPart.color}`}
+          value={selectedPart.color}
           onChange={(e) => {
             console.log('Color change:', {
               oldColor: selectedPart.color,
@@ -31,10 +31,19 @@ export function EditPanel({ selectedPart, onUpdateAttributes, onGrowStem, onShri
               id: selectedPart.id
             })
             onUpdateAttributes(selectedPart.id, { 
-              color: e.target.value.slice(1) 
+              color: e.target.value
             })
           }}
         />
+        <button 
+          onClick={() => {
+            console.log('Clear color:', { id: selectedPart.id })
+            onUpdateAttributes(selectedPart.id, { color: 'none' })
+          }}
+          style={{ marginLeft: '8px' }}
+        >
+          clear
+        </button>
       </div>
       
       {selectedPart.type === 'stem' && onGrowStem && onShrinkStem && (

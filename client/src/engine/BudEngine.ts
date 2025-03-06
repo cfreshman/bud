@@ -11,6 +11,14 @@ import { InputManager } from './InputManager'
 
 export type PartType = 'stem' | 'leaf' | 'thorn' | 'flower'
 
+export type PartAttributes = {
+  color?: string  // Hex color without #
+  // Add other inheritable attributes here like:
+  // opacity?: number
+  // roughness?: number
+  // etc.
+}
+
 export type Transform = {
   position: THREE.Vector3    // Local position relative to parent
   up: THREE.Vector3         // Local up direction 
@@ -27,11 +35,8 @@ export type Body = {
 export type Part = {
   id: string
   type: PartType
-  // Visual
-  color?: THREE.Color
-  // Bone sequence that makes up this part
+  attributes: PartAttributes
   boneIds: string[]       // Ordered list of bone IDs making up this part
-  // Attachment to parent
   parentBoneId?: string    // Which bone this part is attached to
 }
 
@@ -96,14 +101,15 @@ export class BudEngine {
   private dragOffset: THREE.Vector3 = new THREE.Vector3()
   private groundPlane: THREE.Mesh
   private mouseDown = false
-  private onSelect?: (data: { id: string, type: PartType, position: [number, number, number], color: string }) => void
+  private onSelect?: (data: { id: string, type: PartType, position: [number, number, number], color?: string }) => void
   private onDeselect?: () => void
   private debugMode: boolean = false  // Add debug flag
   private boneTransforms: Map<string, THREE.Matrix4> = new Map() // Store transforms for each bone
   private partAdded: boolean = false // Track when parts are added
+  private bonePartIds: Map<string, string> = new Map() // Store part ID for each bone
   
   constructor(container: HTMLElement, callbacks?: { 
-    onSelect?: (data: { id: string, type: PartType, position: [number, number, number], color: string }) => void
+    onSelect?: (data: { id: string, type: PartType, position: [number, number, number], color?: string }) => void
     onDeselect?: () => void 
   }) {
     this.onSelect = callbacks?.onSelect
@@ -157,7 +163,7 @@ export class BudEngine {
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap
 
     // Brighter ambient light
-    const ambientLight = new THREE.AmbientLight(0xffffff, 1.7)
+    const ambientLight = new THREE.AmbientLight(0xffffff, 2.2)
     this.scene.add(ambientLight)
     
     // Brighter directional light with better position
@@ -443,10 +449,10 @@ export class BudEngine {
         }
 
         this.notifySelect({
-          id,
+          id: selectedObject.userData.boneId, // Use bone ID instead of part ID
           type: selectedType,
           position: intersects[0].point.toArray(),
-          color: this.getDefaultColor(selectedType)
+          color: undefined,
         })
         return
       }
@@ -475,10 +481,10 @@ export class BudEngine {
         this.composer.render()
         
         this.notifySelect({
-          id: partGroup.userData.partId,
+          id: selectedObject.userData.boneId, // Use bone ID instead of part ID
           type: selectedPart.type,
           position: selectedObject.position.toArray(),
-          color: this.getDefaultColor(selectedPart.type)
+          color: undefined,
         })
         return
       }
@@ -615,8 +621,9 @@ export class BudEngine {
     requestAnimationFrame(this.animate)
     this.controls.update()
     
-    // Clear bone transforms for this frame
+    // Clear bone transforms and part IDs for this frame
     this.boneTransforms.clear()
+    this.bonePartIds.clear()
     
     // Store currently selected objects before cleanup
     const selectedObjects = this.outlinePass.selectedObjects
@@ -742,10 +749,25 @@ export class BudEngine {
     partId: string, 
     parentWorldTransform: THREE.Matrix4, 
     parentGroup?: THREE.Group,
-    parentPartIds: Set<string> = new Set()
+    parentPartIds: Set<string> = new Set(),
+    parentAttributes?: PartAttributes
   ) {
     const part = this.parts.get(partId)
     if (!part) return
+
+    // Store bone to part mapping for each bone in this part
+    for (const boneId of part.boneIds) {
+      this.bonePartIds.set(boneId, partId)
+    }
+
+    // Merge attributes with parent's, allowing override
+    const attributes: PartAttributes = {
+      ...parentAttributes,
+      ...part.attributes
+    }
+    if (!attributes.color) {
+      attributes.color = this.getDefaultColor(part.type)
+    }
 
     // Add debug visualization at transform origin
     if (this.debugMode) {
@@ -857,7 +879,7 @@ export class BudEngine {
       })
 
       const material = new THREE.MeshStandardMaterial({ 
-        color: part.color || this.getDefaultColor(part.type),
+        color: attributes.color,
         roughness: 0.7,
         metalness: 0.2,
         side: part.type === 'leaf' || part.type === 'flower' ? THREE.DoubleSide : THREE.FrontSide
@@ -1005,7 +1027,7 @@ export class BudEngine {
         attachmentTransform.setPosition(attachPoint)
         
         // Recursively render child part
-        this.renderPartHierarchy(childPartId, attachmentTransform, partGroup, currentParentIds)
+        this.renderPartHierarchy(childPartId, attachmentTransform, partGroup, currentParentIds, attributes)
 
         // Add debug visualization if debug mode is on
         if (this.debugMode) {
@@ -1202,7 +1224,7 @@ export class BudEngine {
         // Calculate attachment point on bone
         const attachPoint = boneStart.clone().add(up.clone().multiplyScalar(clampedRatio * boneLength))
         
- // Calculate vector from attachment point to mouse in bone's local space
+        // Calculate vector from attachment point to mouse in bone's local space
         const toMouse = new THREE.Vector3().subVectors(worldPosition, attachPoint)
         
         // Create inverse rotation matrix to transform toMouse into bone's local space
@@ -1363,7 +1385,7 @@ export class BudEngine {
     }
   }
 
-  private notifySelect(data: { id: string, type: PartType, position: [number, number, number], color: string }) {
+  private notifySelect(data: { id: string, type: PartType, position: [number, number, number], color?: string }) {
     console.log('BudEngine: Notifying select', {
       data,
       partExists: this.parts.has(data.id),
@@ -1373,7 +1395,7 @@ export class BudEngine {
     // Ensure color is always defined
     const safeData = {
       ...data,
-      color: data.color || this.getDefaultColor(data.type)
+      color: data.color
     }
     if (this.onSelect) {
       this.onSelect(safeData)
@@ -1400,35 +1422,41 @@ export class BudEngine {
     }
   }
 
-  updateBoneAttributes(id: string, attributes: { color?: string }) {
-    const bone = this.bones.get(id)
-    if (!bone) return
-    
-    const part = this.parts.get(bone.partId)
-    if (!part) return
+  updateBoneAttributes(id: string, attributes: PartAttributes) {
+    console.log('BudEngine: Updating bone attributes', {
+      id,
+      attributes,
+      partsKeys: Array.from(this.parts.keys()),
+    })
 
-    if (attributes.color) {
-      // Update the part's color
-      part.color = new THREE.Color(`#${attributes.color}`)
-      
-      // Find all meshes in this part's group and update their colors
-      const partGroup = this.scene.children.find(child => 
-        child instanceof THREE.Group && child.userData.partId === part.id
-      )
-      
-      if (partGroup) {
-        partGroup.traverse(child => {
-          if (child instanceof THREE.Mesh && child.material instanceof THREE.MeshStandardMaterial) {
-            child.material.color = new THREE.Color(`#${attributes.color}`)
-            child.material.needsUpdate = true
-          }
-        })
-        
-        // Force a render to show the color change
-        this.composer.render()
-      }
+    // Get part ID from bone ID mapping
+    const partId = this.bonePartIds.get(id)
+    if (!partId) {
+      console.error('BudEngine: No part found for bone', id)
+      return
     }
-    this.saveToLocalStorage() // Save after color change
+    
+    const part = this.parts.get(partId)
+    if (!part) {
+      console.error('BudEngine: Part not found', partId)
+      return
+    }
+
+    // Update the part's attributes, only changing provided values
+    part.attributes = {
+      ...part.attributes,
+      ...attributes
+    }
+    if (part.attributes.color === 'none') {
+      delete part.attributes.color
+    }
+
+    console.log('BudEngine: Updated part attributes', {
+      id,
+      attributes: part.attributes
+    })
+
+    this.saveToLocalStorage()
   }
 
   private addPart(params: {
@@ -1436,14 +1464,18 @@ export class BudEngine {
     type: PartType,
     length?: number,
     width?: number,
-    isHead?: boolean
+    isHead?: boolean,
+    attributes?: PartAttributes
   }): string {
     const id = Math.random().toString(36).substr(2, 9)
     
-    // Create the part
+    // Create the part with default attributes
     const part: Part = {
       id,
       type: params.type,
+      attributes: {
+        color: undefined,
+      },
       boneIds: []
     }
     
@@ -1910,7 +1942,7 @@ export class BudEngine {
 
     return {
       type: part.type,
-      color: part.color ? `#${part.color.getHexString()}` : undefined,
+      attributes: part.attributes,
       bones
     }
   }
@@ -1952,17 +1984,13 @@ export class BudEngine {
   }
 
   private loadPartData(partData: any, parentBoneId?: string): string | null {
-    // Create the part
     const partId = Math.random().toString(36).substr(2, 9)
     const part: Part = {
       id: partId,
       type: partData.type,
+      attributes: partData.attributes || { color: undefined },
       boneIds: [],
       parentBoneId
-    }
-
-    if (partData.color) {
-      part.color = new THREE.Color(partData.color)
     }
 
     // Create bones
