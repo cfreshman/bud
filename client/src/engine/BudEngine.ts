@@ -619,6 +619,9 @@ export class BudEngine {
     // 4. Part pots and dirt
     // 5. Debug spheres
     const groupsToRemove = this.scene.children.filter(child => {
+      // remove toRemove
+      if (child.userData.toRemove) return true
+        
       // Keep non-group objects
       if (!(child instanceof THREE.Group)) {
         // Keep ground plane, previews, and debug spheres
@@ -736,6 +739,43 @@ export class BudEngine {
     const part = this.parts.get(partId)
     if (!part) return
 
+    // Add debug visualization at transform origin
+    if (this.debugMode) {
+      const debugGeo = new THREE.CircleGeometry(.05)
+      debugGeo.rotateX(Math.PI / 2)
+      const debugMat = new THREE.MeshBasicMaterial({ 
+        color: 0xff00ff,
+        depthTest: false,
+        transparent: true,
+        opacity: 0.8,
+        side: THREE.DoubleSide
+      })
+      const debugMesh = new THREE.Mesh(debugGeo, debugMat)
+      
+      // Extract coordinate system from transform
+      const position = new THREE.Vector3()
+      const right = new THREE.Vector3()
+      const up = new THREE.Vector3()
+      const forward = new THREE.Vector3()
+      
+      position.setFromMatrixPosition(parentWorldTransform)
+      parentWorldTransform.extractBasis(right, up, forward)
+      
+      // Position mesh
+      debugMesh.position.copy(position)
+      
+      // Orient mesh to match coordinate system (up vector is mesh normal)
+      debugMesh.quaternion.setFromUnitVectors(
+        new THREE.Vector3(0, 1, 0), // Plane's default normal
+        up // Orient to match up vector
+      )
+      
+      // Mark for cleanup
+      debugMesh.userData.toRemove = true
+      debugMesh.renderOrder = 999
+      this.scene.add(debugMesh)
+    }
+
     // Add current part to parent IDs for children
     const currentParentIds = new Set(parentPartIds)
     currentParentIds.add(partId)
@@ -847,18 +887,23 @@ export class BudEngine {
       // Position and rotate mesh using world transform
       mesh.position.setFromMatrixPosition(worldTransform)
       
-      // Get the same direction we use for the green arrow
-      const boneUp = new THREE.Vector3(0, 1, 0).applyMatrix4(worldTransform).normalize()
+      // Extract coordinate system from transform, just like debug plane
+      const right = new THREE.Vector3()
+      const up = new THREE.Vector3()
+      const forward = new THREE.Vector3()
+      worldTransform.extractBasis(right, up, forward)
       
-      // Directly align mesh with boneUp
-      const meshUp = new THREE.Vector3(0, 1, 0)
-      mesh.quaternion.setFromUnitVectors(meshUp, boneUp)
+      // Orient mesh exactly like debug plane
+      mesh.quaternion.setFromUnitVectors(
+        new THREE.Vector3(0, 1, 0),
+        up
+      )
 
       // Add to part group
       partGroup.add(mesh)
 
       // Add debug visualization if debug mode is on
-      if (0 && this.debugMode) {
+      if (this.debugMode) {
         const boneStart = new THREE.Vector3().setFromMatrixPosition(worldTransform)
         const boneUp = new THREE.Vector3(0, 1, 0).applyMatrix4(worldTransform).normalize()
         
@@ -877,7 +922,7 @@ export class BudEngine {
           opacity: 0.8
         })
         const arrowMat2 = new THREE.LineBasicMaterial({
-          color: 0x00ff00,
+          color: 0xffff00,
           depthTest: false,
           transparent: true,
           opacity: 0.8
@@ -891,36 +936,35 @@ export class BudEngine {
 
         // Create arrow helpers showing bone's transform
         // Red = right, Green = up, Blue = forward
-        const arrowHelper1 = new THREE.ArrowHelper(
-          boneRight,
-          boneStart,
-          bone.width,
-          0xff0000
-        )
-        arrowHelper1.line.material = arrowMat1
-        arrowHelper1.cone.material = arrowMat1
-        arrowHelper1.userData.isDebug = true
-        arrowHelper1.renderOrder = 999
-        partGroup.add(arrowHelper1)
+        // const arrowHelper1 = new THREE.ArrowHelper(
+        //   boneRight,
+        //   boneStart,
+        //   bone.width,
+        //   0xff0000
+        // )
+        // arrowHelper1.line.material = arrowMat1
+        // arrowHelper1.cone.material = arrowMat1
+        // arrowHelper1.userData.isDebug = true
+        // arrowHelper1.renderOrder = 999
+        // partGroup.add(arrowHelper1)
 
-        // Add negative right arrow (red)
-        const arrowHelper1Neg = new THREE.ArrowHelper(
-          boneRight.clone().negate(),
-          boneStart,
-          bone.width,
-          0xff0000
-        )
-        arrowHelper1Neg.line.material = arrowMat1
-        arrowHelper1Neg.cone.material = arrowMat1
-        arrowHelper1Neg.userData.isDebug = true
-        arrowHelper1Neg.renderOrder = 999
-        partGroup.add(arrowHelper1Neg)
+        // // Add negative right arrow (red)
+        // const arrowHelper1Neg = new THREE.ArrowHelper(
+        //   boneRight.clone().negate(),
+        //   boneStart,
+        //   bone.width,
+        //   0xff0000
+        // )
+        // arrowHelper1Neg.line.material = arrowMat1
+        // arrowHelper1Neg.cone.material = arrowMat1
+        // arrowHelper1Neg.userData.isDebug = true
+        // arrowHelper1Neg.renderOrder = 999
+        // partGroup.add(arrowHelper1Neg)
 
         const arrowHelper2 = new THREE.ArrowHelper(
           boneUp,
           boneStart,
           bone.length,
-          0x00ff00
         )
         arrowHelper2.line.material = arrowMat2
         arrowHelper2.cone.material = arrowMat2
@@ -928,30 +972,30 @@ export class BudEngine {
         arrowHelper2.renderOrder = 999
         partGroup.add(arrowHelper2)
 
-        const arrowHelper3 = new THREE.ArrowHelper(
-          boneForward,
-          boneStart,
-          bone.width,
-          0x0000ff
-        )
-        arrowHelper3.line.material = arrowMat3
-        arrowHelper3.cone.material = arrowMat3
-        arrowHelper3.userData.isDebug = true
-        arrowHelper3.renderOrder = 999
-        partGroup.add(arrowHelper3)
+        // const arrowHelper3 = new THREE.ArrowHelper(
+        //   boneForward,
+        //   boneStart,
+        //   bone.width,
+        //   0x0000ff
+        // )
+        // arrowHelper3.line.material = arrowMat3
+        // arrowHelper3.cone.material = arrowMat3
+        // arrowHelper3.userData.isDebug = true
+        // arrowHelper3.renderOrder = 999
+        // partGroup.add(arrowHelper3)
 
-        // Add negative forward arrow (blue)
-        const arrowHelper3Neg = new THREE.ArrowHelper(
-          boneForward.clone().negate(),
-          boneStart,
-          bone.width,
-          0x0000ff
-        )
-        arrowHelper3Neg.line.material = arrowMat3
-        arrowHelper3Neg.cone.material = arrowMat3
-        arrowHelper3Neg.userData.isDebug = true
-        arrowHelper3Neg.renderOrder = 999
-        partGroup.add(arrowHelper3Neg)
+        // // Add negative forward arrow (blue)
+        // const arrowHelper3Neg = new THREE.ArrowHelper(
+        //   boneForward.clone().negate(),
+        //   boneStart,
+        //   bone.width,
+        //   0x0000ff
+        // )
+        // arrowHelper3Neg.line.material = arrowMat3
+        // arrowHelper3Neg.cone.material = arrowMat3
+        // arrowHelper3Neg.userData.isDebug = true
+        // arrowHelper3Neg.renderOrder = 999
+        // partGroup.add(arrowHelper3Neg)
       }
 
       // Process child parts
@@ -1193,7 +1237,7 @@ export class BudEngine {
         const boneForward = new THREE.Vector3(0, 0, 1).applyMatrix4(boneTransform).normalize()
         const boneLength = parentBone.length
         
-        // Calculate ratio along parent bone using world space positions
+ // Calculate ratio along parent bone using world space positions
         const hitPoint = boneIntersects[0].point
         
         // Project hit point onto bone line to get closest point
@@ -1205,7 +1249,7 @@ export class BudEngine {
         // Calculate attachment point on bone
         const attachPoint = boneStart.clone().add(boneUp.clone().multiplyScalar(clampedRatio * boneLength))
         
-        // Calculate vector from attachment point to mouse in bone's local space
+ // Calculate vector from attachment point to mouse in bone's local space
         const toMouse = new THREE.Vector3().subVectors(worldPosition, attachPoint)
         
         // Create inverse rotation matrix to transform toMouse into bone's local space
@@ -1291,8 +1335,6 @@ export class BudEngine {
           oldParentBone.children.delete(part.id)
         }
         part.parentBoneId = undefined
-        part.attachPoint = undefined
-        part.attachAngle = undefined
 
         // Add back to roots since it's detached
         this.roots.add(part.id)
