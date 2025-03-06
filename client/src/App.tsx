@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import { BudEngine, PartType } from './engine/BudEngine'
+import { BudEngine } from './engine/BudEngine'
 import { EditPanel } from './components/EditPanel'
 import { Status } from './components/Status'
+import { EditableProperties } from './types'
 import './App.css'
 
 declare global {
@@ -10,19 +11,10 @@ declare global {
   }
 }
 
-type SelectedPart = {
-  id: string
-  type: PartType
-  position: [number, number, number]
-  color: string
-  length: number
-  width: number
-} | null
-
 function App() {
   const containerRef = useRef<HTMLDivElement>(null)
   const engineRef = useRef<BudEngine | null>(null)
-  const [selectedPart, setSelectedPart] = useState<SelectedPart>(null)
+  const [selected, setSelected] = useState<EditableProperties | null>(null)
 
   useEffect(() => {
     if (!containerRef.current) return
@@ -32,16 +24,19 @@ function App() {
       engineRef.current = new BudEngine(containerRef.current, {
         onSelect: (data) => {
           if (!data.length || !data.width) return
-          setSelectedPart({
+          setSelected({
             id: data.id,
             type: data.type,
             position: data.position,
             color: data.color || '',
             length: data.length,
-            width: data.width
+            width: data.width,
+            theta: data.theta,
+            phi: data.phi,
+            twist: data.twist
           })
         },
-        onDeselect: () => setSelectedPart(null)
+        onDeselect: () => setSelected(null)
       })
       window.budEngine = engineRef.current
     }
@@ -49,18 +44,18 @@ function App() {
     // No cleanup needed - we want to keep the engine instance
   }, [])
 
-  const handleUpdateAttributes = (id: string, attributes: { color?: string, length?: number, width?: number }) => {
+  const handleUpdateProperties = (id: string, updates: Partial<EditableProperties>) => {
     if (!engineRef.current) return
-    engineRef.current.updateBoneAttributes(id, attributes)
+    engineRef.current.updateProperties(id, updates)
     
-    // Update selectedPart state with new attributes
-    setSelectedPart(prev => {
+    // Update selected state with new properties
+    setSelected(prev => {
       if (!prev || prev.id !== id) return prev
       return {
         ...prev,
-        ...attributes,
+        ...updates,
         // Handle special case for clearing color
-        color: attributes.color === 'none' ? '' : (attributes.color || prev.color)
+        color: updates.color === 'none' ? '' : (updates.color || prev.color)
       }
     })
   }
@@ -81,8 +76,8 @@ function App() {
     <div className="app">
       <div ref={containerRef} className="canvas-container" />
       <EditPanel 
-        selectedPart={selectedPart}
-        onUpdateAttributes={handleUpdateAttributes}
+        selected={selected}
+        onUpdateProperties={handleUpdateProperties}
         onGrowStem={handleGrowStem}
         onShrinkStem={handleShrinkStem}
       />

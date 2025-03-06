@@ -103,7 +103,7 @@ export class BudEngine {
   private dragOffset: THREE.Vector3 = new THREE.Vector3()
   private groundPlane: THREE.Mesh
   private mouseDown = false
-  private onSelect?: (data: { id: string, type: PartType, position: [number, number, number], color?: string, length: number, width: number }) => void
+  private onSelect?: (data: { id: string, type: PartType, position: [number, number, number], color?: string, length: number, width: number, theta?: number, phi?: number, twist?: number }) => void
   private onDeselect?: () => void
   private debugMode: boolean = false  // Add debug flag
   private boneTransforms: Map<string, THREE.Matrix4> = new Map() // Store transforms for each bone
@@ -111,7 +111,17 @@ export class BudEngine {
   private bonePartIds: Map<string, string> = new Map() // Store part ID for each bone
   
   constructor(container: HTMLElement, callbacks?: { 
-    onSelect?: (data: { id: string, type: PartType, position: [number, number, number], color?: string, length: number, width: number }) => void
+    onSelect?: (data: { 
+      id: string
+      type: PartType
+      position: [number, number, number]
+      color?: string
+      length: number
+      width: number
+      theta?: number
+      phi?: number
+      twist?: number
+    }) => void
     onDeselect?: () => void 
   }) {
     this.onSelect = callbacks?.onSelect
@@ -397,7 +407,6 @@ export class BudEngine {
     this.isDragging = false
 
     // unselect any selected part
-    this.notifyDeselect()
     this.activePartId = undefined
 
     this.mouse.x = (event.clientX / this.renderer.domElement.clientWidth) * 2 - 1
@@ -867,7 +876,7 @@ export class BudEngine {
       const rotMatrix = new THREE.Matrix4()
       const worldUp = new THREE.Vector3(0, 1, 0)
       
-      if (Math.abs(bone.direction.dot(worldUp)) < 0.99) {
+      if (Math.abs(bone.direction.dot(worldUp)) < 0.9999) {
         const right = new THREE.Vector3().crossVectors(worldUp, bone.direction).normalize()
         const forward = new THREE.Vector3().crossVectors(bone.direction, right).normalize()
         rotMatrix.makeBasis(right, bone.direction, forward)
@@ -1402,22 +1411,23 @@ export class BudEngine {
     }
   }
 
-  private notifySelect(data: { id: string, type: PartType, position: [number, number, number], color?: string, length: number, width: number }) {
-    console.log('BudEngine: Notifying select', {
-      data,
-      partExists: this.parts.has(data.id),
-      selectedBoneId: this.selectedBoneId,
-      activePartId: this.activePartId
-    })
-
-    // Get the bone to get its dimensions
+  private notifySelect(data: { 
+    id: string
+    type: PartType
+    position: [number, number, number]
+    color?: string
+    length: number
+    width: number
+    theta?: number
+    phi?: number
+    twist?: number
+  }) {
     const bone = this.bones.get(data.id)
     if (!bone) {
       console.error('BudEngine: No bone found for id', data.id)
       return
     }
 
-    // Get the part to get its attributes
     const partId = this.bonePartIds.get(data.id)
     if (!partId) {
       console.error('BudEngine: No part found for bone', data.id)
@@ -1429,15 +1439,23 @@ export class BudEngine {
       return
     }
 
+    // Get bone angles
+    const theta = Math.acos(bone.direction.y) * 180 / Math.PI
+    const phi = Math.atan2(bone.direction.z, bone.direction.x) * 180 / Math.PI
+    const twist = bone.twist * 180 / Math.PI
+
     // Use the provided color if it exists, otherwise use the part's color attribute
     const color = data.color !== undefined ? data.color : part.attributes.color
 
-    // Ensure color is always defined and include bone dimensions
+    // Ensure color is always defined and include bone dimensions and angles
     const safeData = {
       ...data,
       color: color || this.getDefaultColor(data.type),
       length: bone.length,
-      width: bone.width
+      width: bone.width,
+      theta,
+      phi: phi < 0 ? phi + 360 : phi, // Convert to 0-360 range
+      twist: twist < 0 ? twist + 360 : twist // Convert to 0-360 range
     }
     
     if (this.onSelect) {
@@ -1754,7 +1772,7 @@ export class BudEngine {
       const worldUp = new THREE.Vector3(0, 1, 0)
       
       // Create rotation matrix from bone's direction
-      if (Math.abs(bone.direction.dot(worldUp)) < 0.99) {
+      if (Math.abs(bone.direction.dot(worldUp)) < 0.9999) {
         const right = new THREE.Vector3().crossVectors(worldUp, bone.direction).normalize()
         const forward = new THREE.Vector3().crossVectors(bone.direction, right).normalize()
         rotMatrix.makeBasis(right, bone.direction, forward)
@@ -1972,6 +1990,8 @@ export class BudEngine {
         length: bone.length,
         width: bone.width,
         isHead: bone.isHead,
+        direction: bone.direction.toArray(),
+        twist: bone.twist,
         children
       }
     })
@@ -2043,6 +2063,14 @@ export class BudEngine {
       // Process children
       const bone = this.bones.get(boneId)
       if (bone) {
+        // Restore bone direction and twist if they exist
+        if (boneData.direction) {
+          bone.direction.fromArray(boneData.direction)
+        }
+        if (boneData.twist !== undefined) {
+          bone.twist = boneData.twist
+        }
+
         boneData.children.forEach((childData: any) => {
           const childId = this.loadPartData(childData.part, boneId)
           if (childId) {
@@ -2147,6 +2175,102 @@ export class BudEngine {
       }
     } else {
       console.log('BudEngine: No body found for part', { rootPartId: currentPart.id })
+    }
+  }
+
+  updateProperties(boneId: string, updates: {
+    color?: string
+    length?: number
+    width?: number
+    theta?: number
+    phi?: number
+    twist?: number
+  }) {
+    // Get the bone
+    const bone = this.bones.get(boneId)
+    if (!bone) {
+      console.error('BudEngine: No bone found for id', boneId)
+      return
+    }
+
+    // Get the part
+    const partId = this.bonePartIds.get(boneId)
+    if (!partId) {
+      console.error('BudEngine: No part found for bone', boneId)
+      return
+    }
+    const part = this.parts.get(partId)
+    if (!part) {
+      console.error('BudEngine: Part not found', partId)
+      return
+    }
+
+    // Update part attributes
+    if (updates.color !== undefined || updates.length !== undefined || updates.width !== undefined) {
+      const attributes: PartAttributes = {}
+      if (updates.color !== undefined) {
+        if (updates.color === 'none') {
+          delete part.attributes.color
+        } else {
+          attributes.color = updates.color
+        }
+      }
+      if (updates.length !== undefined) {
+        attributes.length = updates.length
+        // Update all bones in the part
+        part.boneIds.forEach(id => {
+          const b = this.bones.get(id)
+          if (b) b.length = updates.length!
+        })
+      }
+      if (updates.width !== undefined) {
+        attributes.width = updates.width
+        // Update all bones in the part
+        part.boneIds.forEach(id => {
+          const b = this.bones.get(id)
+          if (b) b.width = updates.width!
+        })
+      }
+      part.attributes = {
+        ...part.attributes,
+        ...attributes
+      }
+    }
+
+    // Update bone angles
+    if (updates.theta !== undefined || updates.phi !== undefined) {
+      // Convert spherical coordinates to direction vector
+      const theta = updates.theta !== undefined ? updates.theta * Math.PI / 180 : Math.acos(bone.direction.y)
+      const phi = updates.phi !== undefined ? updates.phi * Math.PI / 180 : Math.atan2(bone.direction.z, bone.direction.x)
+      
+      bone.direction.set(
+        Math.sin(theta) * Math.cos(phi),
+        Math.cos(theta),
+        Math.sin(theta) * Math.sin(phi)
+      ).normalize()
+    }
+
+    // Update bone twist
+    if (updates.twist !== undefined) {
+      bone.twist = updates.twist * Math.PI / 180
+    }
+
+    // Find root part and render entire body
+    let rootPart = part
+    while (rootPart.parentBoneId) {
+      const parentBone = this.bones.get(rootPart.parentBoneId)
+      if (!parentBone) break
+      const nextPart = this.parts.get(parentBone.partId)
+      if (!nextPart) break
+      rootPart = nextPart
+    }
+
+    // Find and render body
+    const body = Array.from(this.bodies.values())
+      .find(b => b.rootPartId === rootPart.id)
+    if (body) {
+      this.renderBody(body.id)
+      this.saveToLocalStorage()
     }
   }
 } 

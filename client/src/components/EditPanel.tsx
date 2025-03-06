@@ -1,47 +1,28 @@
-import { PartType } from '../engine/BudEngine'
-
-type SelectedPart = {
-  id: string
-  type: PartType
-  position: [number, number, number]
-  color: string
-  length: number
-  width: number
-} | null
+import { EditableProperties } from '../types'
 
 type EditPanelProps = {
-  selectedPart: SelectedPart
-  onUpdateAttributes: (id: string, attributes: { color?: string, length?: number, width?: number }) => void
+  selected: EditableProperties | null
+  onUpdateProperties: (id: string, updates: Partial<EditableProperties>) => void
   onGrowStem?: (id: string) => void
   onShrinkStem?: (id: string) => void
 }
 
-export function EditPanel({ selectedPart, onUpdateAttributes, onGrowStem, onShrinkStem }: EditPanelProps) {
-  if (!selectedPart) return null
+export function EditPanel({ selected, onUpdateProperties, onGrowStem, onShrinkStem }: EditPanelProps) {
+  if (!selected) return null
 
   return (
     <div className="edit-panel">
       <div className="edit-row">
-        <span>{selectedPart.type}</span>
+        <span>{selected.type}</span>
         <input 
           type="color" 
-          value={selectedPart.color}
+          value={selected.color}
           onChange={(e) => {
-            console.log('Color change:', {
-              oldColor: selectedPart.color,
-              newColor: e.target.value,
-              id: selectedPart.id
-            })
-            onUpdateAttributes(selectedPart.id, { 
-              color: e.target.value
-            })
+            onUpdateProperties(selected.id, { color: e.target.value })
           }}
         />
         <button 
-          onClick={() => {
-            console.log('Clear color:', { id: selectedPart.id })
-            onUpdateAttributes(selectedPart.id, { color: 'none' })
-          }}
+          onClick={() => onUpdateProperties(selected.id, { color: 'none' })}
           style={{ marginLeft: '8px' }}
         >
           clear
@@ -55,15 +36,14 @@ export function EditPanel({ selectedPart, onUpdateAttributes, onGrowStem, onShri
           min="0.1"
           max="1.0"
           step="0.05"
-          value={selectedPart.length}
+          value={selected.length}
           onChange={(e) => {
             const length = parseFloat(e.target.value)
-            console.log('Length change:', { length, id: selectedPart.id })
-            onUpdateAttributes(selectedPart.id, { length })
+            onUpdateProperties(selected.id, { length })
           }}
           onInput={(e) => {
             const length = parseFloat((e.target as HTMLInputElement).value)
-            onUpdateAttributes(selectedPart.id, { length })
+            onUpdateProperties(selected.id, { length })
           }}
         />
       </div>
@@ -75,31 +55,81 @@ export function EditPanel({ selectedPart, onUpdateAttributes, onGrowStem, onShri
           min="0.01"
           max="0.2"
           step="0.01"
-          value={selectedPart.width}
+          value={selected.width}
           onChange={(e) => {
             const width = parseFloat(e.target.value)
-            console.log('Width change:', { width, id: selectedPart.id })
-            onUpdateAttributes(selectedPart.id, { width })
+            onUpdateProperties(selected.id, { width })
           }}
           onInput={(e) => {
             const width = parseFloat((e.target as HTMLInputElement).value)
-            onUpdateAttributes(selectedPart.id, { width })
+            onUpdateProperties(selected.id, { width })
+          }}
+        />
+      </div>
+
+      <div className="edit-row">
+        <span>θ angle</span>
+        <input
+          type="range"
+          min="0"
+          max="180"
+          step="5"
+          value={selected.theta}
+          onChange={(e) => {
+            const theta = parseFloat(e.target.value)
+            onUpdateProperties(selected.id, { theta })
+          }}
+          onInput={(e) => {
+            const theta = parseFloat((e.target as HTMLInputElement).value)
+            onUpdateProperties(selected.id, { theta })
+          }}
+        />
+      </div>
+
+      <div className="edit-row">
+        <span>φ angle</span>
+        <input
+          type="range"
+          min="0"
+          max="360"
+          step="5"
+          value={selected.phi}
+          onChange={(e) => {
+            const phi = parseFloat(e.target.value)
+            onUpdateProperties(selected.id, { phi })
+          }}
+          onInput={(e) => {
+            const phi = parseFloat((e.target as HTMLInputElement).value)
+            onUpdateProperties(selected.id, { phi })
+          }}
+        />
+      </div>
+
+      <div className="edit-row">
+        <span>twist</span>
+        <input
+          type="range"
+          min="0"
+          max="360"
+          step="5"
+          value={selected.twist}
+          onChange={(e) => {
+            const twist = parseFloat(e.target.value)
+            onUpdateProperties(selected.id, { twist })
+          }}
+          onInput={(e) => {
+            const twist = parseFloat((e.target as HTMLInputElement).value)
+            onUpdateProperties(selected.id, { twist })
           }}
         />
       </div>
       
-      {selectedPart.type === 'stem' && onGrowStem && onShrinkStem && (
+      {selected.type === 'stem' && onGrowStem && onShrinkStem && (
         <div className="edit-row">
-          <button onClick={() => {
-            console.log('EditPanel: Grow clicked', { id: selectedPart.id })
-            onGrowStem(selectedPart.id)
-          }}>
+          <button onClick={() => onGrowStem(selected.id)}>
             grow
           </button>
-          <button onClick={() => {
-            console.log('EditPanel: Shrink clicked', { id: selectedPart.id })
-            onShrinkStem(selectedPart.id)
-          }}>
+          <button onClick={() => onShrinkStem(selected.id)}>
             shrink
           </button>
         </div>
