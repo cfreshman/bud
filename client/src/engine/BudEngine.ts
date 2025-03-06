@@ -97,7 +97,8 @@ export class BudEngine {
   private mouseDown = false
   private onSelect?: (data: { id: string, type: PartType, position: [number, number, number], color: string }) => void
   private onDeselect?: () => void
-  private debugMode: boolean = true  // Add debug flag
+  private debugMode: boolean = false  // Add debug flag
+  private boneTransforms: Map<string, THREE.Matrix4> = new Map() // Store transforms for each bone
   
   constructor(container: HTMLElement, callbacks?: { 
     onSelect?: (data: { id: string, type: PartType, position: [number, number, number], color: string }) => void
@@ -609,6 +610,9 @@ export class BudEngine {
     requestAnimationFrame(this.animate)
     this.controls.update()
     
+    // Clear bone transforms for this frame
+    this.boneTransforms.clear()
+    
     // Store currently selected objects before cleanup
     const selectedObjects = this.outlinePass.selectedObjects
 
@@ -706,7 +710,7 @@ export class BudEngine {
     for (const boneId of currentPart.boneIds) {
       const bone = this.bones.get(boneId)
       if (bone) {
-        for (const [childPartId] of bone.children) {
+        for (const [childPartId] of bone.children.entries()) {
           this.cleanupMeshes(childPartId)
         }
       }
@@ -838,6 +842,9 @@ export class BudEngine {
 
       // Apply rotation to current transform
       const worldTransform = currentTransform.clone().multiply(rotMatrix)
+
+      // Store transform for this bone
+      this.boneTransforms.set(boneId, worldTransform.clone())
 
       // Create mesh for this bone at current position with new rotation
       let geometry: THREE.BufferGeometry
@@ -1153,27 +1160,31 @@ export class BudEngine {
         // Remove from roots since it's getting a parent
         this.roots.delete(part.id)
 
-        // Get world transform for parent bone
-        const boneTransform = this.getWorldTransformForBone(parentBone)
+        // Get transform from stored map instead of recalculating
+        const boneTransform = this.boneTransforms.get(parentBone.id)
+        if (!boneTransform) return
+
+        // Extract transform data
         const boneStart = new THREE.Vector3().setFromMatrixPosition(boneTransform)
-        const boneUp = new THREE.Vector3(0, 1, 0).applyMatrix4(boneTransform).normalize()
-        const boneRight = new THREE.Vector3(1, 0, 0).applyMatrix4(boneTransform).normalize()
-        const boneForward = new THREE.Vector3(0, 0, 1).applyMatrix4(boneTransform).normalize()
+        const right = new THREE.Vector3()
+        const up = new THREE.Vector3()
+        const forward = new THREE.Vector3()
+        boneTransform.extractBasis(right, up, forward)
         const boneLength = parentBone.length
         
- // Calculate ratio along parent bone using world space positions
+        // Calculate ratio along parent bone using world space positions
         const hitPoint = boneIntersects[0].point
         
         // Project hit point onto bone line to get closest point
         const toHit = new THREE.Vector3().subVectors(hitPoint, boneStart)
-        const projectedDistance = toHit.dot(boneUp)
+        const projectedDistance = toHit.dot(up)
         const ratio = projectedDistance / boneLength
         const clampedRatio = Math.max(0, Math.min(1, ratio))
         
         // Calculate attachment point on bone
-        const attachPoint = boneStart.clone().add(boneUp.clone().multiplyScalar(clampedRatio * boneLength))
+        const attachPoint = boneStart.clone().add(up.clone().multiplyScalar(clampedRatio * boneLength))
         
- // Calculate vector from attachment point to mouse in bone's local space
+        // Calculate vector from attachment point to mouse in bone's local space
         const toMouse = new THREE.Vector3().subVectors(worldPosition, attachPoint)
         
         // Create inverse rotation matrix to transform toMouse into bone's local space
@@ -1192,9 +1203,6 @@ export class BudEngine {
         const angle = Math.atan2(localToMouse.z, localToMouse.x)
         
         console.log({ ratio, clampedRatio, degrees: angle * (180 / Math.PI) })
-        
-        // // Calculate perpendicular direction
-        // firstBone.direction.copy(new THREE.Vector3(0, 1, 0))
         
         // Remove from old parent if exists
         if (part.parentBoneId) {
@@ -1286,17 +1294,6 @@ export class BudEngine {
       if (body) {
         // Update body position
         body.transform.position.copy(worldPosition)
-        
-        // // Default to pointing upward
-        // const direction = new THREE.Vector3(0, 1, 0)
-        
-        // // Update bone direction
-        // firstBone.direction.copy(direction)
-        
-        // Update body transform
-        // body.transform.up.copy(direction)
-        // body.transform.right.set(1, 0, 0) // Default right vector
-        // body.transform.forward.set(0, 0, 1) // Default forward vector
         
         // Render the updated body
         this.renderBody(body.id)
