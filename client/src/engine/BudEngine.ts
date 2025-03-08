@@ -2935,7 +2935,8 @@ export class BudEngine {
     }
   }
 
-  private fitCameraToPlant() {
+  // Make public
+  fitCameraToPlant() {
     // Create a bounding box to encompass all plant parts
     const bbox = new THREE.Box3()
     
@@ -2973,5 +2974,73 @@ export class BudEngine {
     // Update controls target to box center
     this.controls.target.copy(center)
     this.controls.update()
+  }
+
+  // Apply properties to all parts of a given type
+  applyPropertiesToAllOfType(boneId: string) {
+    // Get source part from bone ID
+    const sourcePartId = this.bonePartIds.get(boneId)
+    if (!sourcePartId) return
+    
+    const sourcePart = this.parts.get(sourcePartId)
+    if (!sourcePart || sourcePart.type === 'stem') return
+
+    // Get properties to apply
+    const properties = {
+      color: sourcePart.attributes.color,
+      length: sourcePart.attributes.length,
+      width: sourcePart.attributes.width
+    }
+
+    // Keep track of bodies that need re-rendering
+    const bodiesToRender = new Set<string>()
+
+    // Apply to all parts of the same type
+    for (const [partId, part] of this.parts.entries()) {
+      if (part.type === sourcePart.type && partId !== sourcePartId) {
+        // Update part attributes
+        part.attributes = {
+          ...part.attributes,
+          ...properties
+        }
+
+        // Update bone dimensions
+        part.boneIds.forEach(boneId => {
+          const bone = this.bones.get(boneId)
+          if (bone) {
+            if (properties.length !== undefined) {
+              bone.length = properties.length
+            }
+            if (properties.width !== undefined) {
+              bone.width = properties.width
+            }
+          }
+        })
+
+        // Find root part and add its body to render list
+        let rootPart = part
+        while (rootPart.parentBoneId) {
+          const parentBone = this.bones.get(rootPart.parentBoneId)
+          if (!parentBone) break
+          const nextPart = this.parts.get(parentBone.partId)
+          if (!nextPart) break
+          rootPart = nextPart
+        }
+
+        // Find body and add to render set
+        const body = Array.from(this.bodies.values())
+          .find(b => b.rootPartId === rootPart.id)
+        if (body) {
+          bodiesToRender.add(body.id)
+        }
+      }
+    }
+
+    // Render all affected bodies
+    for (const bodyId of bodiesToRender) {
+      this.renderBody(bodyId)
+    }
+
+    this.saveToLocalStorage()
   }
 }

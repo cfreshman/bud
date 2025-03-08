@@ -31,9 +31,9 @@ function App() {
             color: data.color || '',
             length: data.length,
             width: data.width,
-            theta: data.theta,
-            phi: data.phi,
-            twist: data.twist
+            theta: data.theta || 0,
+            phi: data.phi || 0,
+            twist: data.twist || 0
           })
         },
         onDeselect: () => setSelected(null)
@@ -89,6 +89,11 @@ function App() {
     engineRef.current.fitCameraToPlant()
   }
 
+  const handleApplyToAll = (id: string) => {
+    if (!engineRef.current) return
+    engineRef.current.applyPropertiesToAllOfType(id)
+  }
+
   return (
     <div className="app">
       <div ref={containerRef} className="canvas-container" />
@@ -100,6 +105,7 @@ function App() {
         onDelete={handleDelete}
         onClone={handleClone}
         onFitView={handleFitView}
+        onApplyToAll={handleApplyToAll}
       />
       <Status />
     </div>

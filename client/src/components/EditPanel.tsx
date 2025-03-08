@@ -8,6 +8,7 @@ type EditPanelProps = {
   onDelete?: (id: string) => void
   onClone?: (id: string) => void
   onFitView?: () => void
+  onApplyToAll?: (id: string) => void
 }
 
 export function EditPanel({ 
@@ -17,7 +18,8 @@ export function EditPanel({
   onShrinkStem, 
   onDelete, 
   onClone,
-  onFitView 
+  onFitView,
+  onApplyToAll
 }: EditPanelProps) {
   if (!selected) return null
 
@@ -84,6 +86,17 @@ export function EditPanel({
           }}
         />
       </div>
+
+      {selected.type !== 'stem' && onApplyToAll && (
+        <div className="edit-row">
+          <button 
+            className="apply-all"
+            onClick={() => onApplyToAll(selected.id)}
+          >
+            apply to all {selected.type}s
+          </button>
+        </div>
+      )}
 
       <div className="edit-row">
         <span>θ angle</span>
