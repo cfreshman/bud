@@ -7,6 +7,8 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass'
 // @ts-ignore
 import { OutlinePass } from 'three/examples/jsm/postprocessing/OutlinePass'
+// @ts-ignore
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass'
 import { InputManager } from './InputManager'
 
 export type PartType = 'stem' | 'leaf' | 'thorn' | 'flower'
@@ -74,10 +76,10 @@ export class BudEngine {
   private bodies: Map<string, Body> = new Map()
   private parts: Map<string, Part> = new Map()
   private bones: Map<string, Bone> = new Map()
-  private roots: Set<string> = new Set() // Track root part IDs
-  private partParentIds: Map<string, Set<string>> = new Map() // Track parent IDs for each part
+  private roots: Set<string> = new Set()
+  private partParentIds: Map<string, Set<string>> = new Map()
   private scene: THREE.Scene
-  private uiScene: THREE.Scene  // Separate scene for UI elements
+  private uiScene: THREE.Scene
   private camera: THREE.PerspectiveCamera
   private uiCamera: THREE.OrthographicCamera
   private renderer: THREE.WebGLRenderer
@@ -100,15 +102,17 @@ export class BudEngine {
   private selectedBoneId?: string
   private composer: EffectComposer
   private outlinePass: OutlinePass
+  private bloomPass: UnrealBloomPass
   private dragOffset: THREE.Vector3 = new THREE.Vector3()
   private groundPlane: THREE.Mesh
   private mouseDown = false
   private onSelect?: (data: { id: string, type: PartType, position: [number, number, number], color?: string, length: number, width: number, theta?: number, phi?: number, twist?: number }) => void
   private onDeselect?: () => void
-  private debugMode: boolean = false  // Add debug flag
-  private boneTransforms: Map<string, THREE.Matrix4> = new Map() // Store transforms for each bone
-  private partAdded: boolean = false // Track when parts are added
-  private bonePartIds: Map<string, string> = new Map() // Store part ID for each bone
+  private debugMode: boolean = false
+  private bloomEnabled: boolean = true
+  private boneTransforms: Map<string, THREE.Matrix4> = new Map()
+  private partAdded: boolean = false
+  private bonePartIds: Map<string, string> = new Map()
   
   constructor(container: HTMLElement, callbacks?: { 
     onSelect?: (data: { 
@@ -243,9 +247,18 @@ export class BudEngine {
     // Setup post-processing
     this.composer = new EffectComposer(this.renderer)
     
-    // Must set up render pass first
+    // Render pass
     const renderPass = new RenderPass(this.scene, this.camera)
     this.composer.addPass(renderPass)
+    
+    // Very subtle bloom on everything
+    this.bloomPass = new UnrealBloomPass(
+      new THREE.Vector2(container.clientWidth, container.clientHeight),
+      0.15,    // strength - very subtle
+      1,    // radius
+      0     // threshold - low threshold so it affects everything
+    )
+    this.composer.addPass(this.bloomPass)
     
     // Setup outline pass with more visible settings
     this.outlinePass = new OutlinePass(
@@ -2273,4 +2286,15 @@ export class BudEngine {
       this.saveToLocalStorage()
     }
   }
-      }
+
+  // Add method to toggle bloom
+  toggleBloom(enabled?: boolean) {
+    this.bloomEnabled = enabled !== undefined ? enabled : !this.bloomEnabled
+    this.bloomPass.enabled = this.bloomEnabled
+  }
+
+  // Add method to check if bloom is enabled
+  isBloomEnabled(): boolean {
+    return this.bloomEnabled
+  }
+}
