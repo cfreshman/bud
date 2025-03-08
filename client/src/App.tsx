@@ -79,12 +79,14 @@ function App() {
   }
 
   const handleClone = (id: string) => {
-    if (!engineRef.current || !selected) return
+    if (!engineRef.current) return
     console.log('App: Cloning part', { id })
-    engineRef.current.clonePart(id, {
-      ...selected,
-      position: [selected.position[0] + 0.2, selected.position[1], selected.position[2] + 0.2]
-    })
+    engineRef.current.clonePart(id)
+  }
+
+  const handleFitView = () => {
+    if (!engineRef.current) return
+    engineRef.current.fitCameraToPlant()
   }
 
   return (
@@ -97,6 +99,7 @@ function App() {
         onShrinkStem={handleShrinkStem}
         onDelete={handleDelete}
         onClone={handleClone}
+        onFitView={handleFitView}
       />
       <Status />
     </div>

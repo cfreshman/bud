@@ -286,6 +286,7 @@ export class BudEngine {
     // Load saved plant state after everything is set up
     requestAnimationFrame(() => {
       this.loadFromLocalStorage()
+      this.fitCameraToPlant() // Add camera fit after loading saved state
     })
   }
 
@@ -891,15 +892,17 @@ export class BudEngine {
       const rotMatrix = new THREE.Matrix4()
       const worldUp = new THREE.Vector3(0, 1, 0)
       
-      if (Math.abs(bone.direction.dot(worldUp)) < 0.9999) {
-        const right = new THREE.Vector3().crossVectors(worldUp, bone.direction).normalize()
-        const forward = new THREE.Vector3().crossVectors(bone.direction, right).normalize()
-        rotMatrix.makeBasis(right, bone.direction, forward)
-      } else {
-        const right = new THREE.Vector3(1, 0, 0)
-        const forward = new THREE.Vector3(0, 0, 1)
-        rotMatrix.makeBasis(right, bone.direction, forward)
+      // Create consistent basis vectors regardless of angle
+      const boneDir = bone.direction.clone().normalize()
+      // Use world forward (0,0,1) as reference for consistent cross product
+      const boneRight = new THREE.Vector3().crossVectors(worldUp, boneDir).normalize()
+      if (boneRight.lengthSq() < 0.001) {
+        // If bone is aligned with world up, use world forward instead
+        const worldForward = new THREE.Vector3(0, 0, 1)
+        boneRight.crossVectors(worldForward, boneDir).normalize()
       }
+      const boneForward = new THREE.Vector3().crossVectors(boneDir, boneRight).normalize()
+      rotMatrix.makeBasis(boneRight, boneDir, boneForward)
 
       // Apply twist if any
       if (bone.twist !== 0) {
@@ -1026,66 +1029,50 @@ export class BudEngine {
         // Create attachment transform matrix
         const attachmentTransform = new THREE.Matrix4()
         
-        // Get parent bone's up direction
-        const parentUp = up.clone().normalize()
-
-        let childUp: THREE.Vector3
-        let childRight: THREE.Vector3
-        let childForward: THREE.Vector3
-
-        // Handle end attachments (ratio 0 or 1) differently from side attachments
+        // Get parent bone's up direction (bone axis)
+        const boneAxis = up.clone().normalize()
+        
+        // Create quaternion for initial orientation aligned with parent bone
+        const alignQuat = new THREE.Quaternion()
+        
         if (attachment.ratio === 0 || attachment.ratio === 1) {
           // For end attachments, align with bone direction
-          childUp = parentUp.clone()
-          childRight = right.clone()
-          childForward = forward.clone()
-
-          // If attaching to start (ratio 0), rotate 180° around right axis to point outward
           if (attachment.ratio === 0) {
-            const rotMatrix = new THREE.Matrix4().makeRotationAxis(childRight, Math.PI)
-            childUp.applyMatrix4(rotMatrix)
-            childForward.applyMatrix4(rotMatrix)
+            // At start, point opposite to parent direction
+            alignQuat.setFromUnitVectors(new THREE.Vector3(0, 1, 0), boneAxis.clone().negate())
+          } else {
+            // At end, point same as parent direction
+            alignQuat.setFromUnitVectors(new THREE.Vector3(0, 1, 0), boneAxis)
           }
-          // ratio 1 means align with parent's direction (no rotation needed)
-
-          // Apply twist around up axis
-          const twistMatrix = new THREE.Matrix4().makeRotationAxis(childUp, attachment.angle)
-          childRight.applyMatrix4(twistMatrix)
-          childForward.applyMatrix4(twistMatrix)
         } else {
-          // Original side attachment logic
-          // Create unit vector in XZ plane based on angle
-          const localOffset = new THREE.Vector3(
+          // For side attachments, create perpendicular orientation
+          // First find a perpendicular direction based on attachment angle
+          const perpDir = new THREE.Vector3(
             Math.cos(attachment.angle),
             0,
             Math.sin(attachment.angle)
           ).normalize()
           
-          // Create a matrix for just the rotation part of the bone transform
-          const rotationMatrix = boneTransform.clone()
-          rotationMatrix.setPosition(new THREE.Vector3(0, 0, 0))
+          // Transform perpendicular direction by parent's rotation
+          perpDir.applyMatrix4(boneTransform)
+          perpDir.sub(boneStart).normalize()
           
-          // Transform the local offset by just the rotation to get world space direction
-          const perpOffset = localOffset.clone()
-            .applyMatrix4(rotationMatrix)
-            .normalize()
-            .multiplyScalar(bone.width * .9)
+          // Add offset from bone surface
+          attachPoint.add(perpDir.clone().multiplyScalar(bone.width * 0.9))
           
-          // Add offset to attachment point
-          attachPoint.add(perpOffset)
-          
-          // Create child's coordinate system:
-          // 1. childUp is the perpOffset direction (perpendicular to parent)
-          childUp = perpOffset.clone().normalize()
-          
-          // 2. childForward is the parent's up direction
-          childForward = parentUp
-          
-          // 3. childRight completes the right-handed system
-          childRight = new THREE.Vector3().crossVectors(childForward, childUp).normalize()
+          // Create quaternion to align with perpendicular direction
+          alignQuat.setFromUnitVectors(new THREE.Vector3(0, 1, 0), perpDir)
         }
-
-        // Create attachment transform with position and orientation
+        
+        // Create rotation matrix from quaternion
+        const rotMatrix = new THREE.Matrix4().makeRotationFromQuaternion(alignQuat)
+        
+        // Extract basis vectors
+        const childRight = new THREE.Vector3(1, 0, 0).applyMatrix4(rotMatrix)
+        const childUp = new THREE.Vector3(0, 1, 0).applyMatrix4(rotMatrix)
+        const childForward = new THREE.Vector3(0, 0, 1).applyMatrix4(rotMatrix)
+        
+        // Create final transform
         attachmentTransform.makeBasis(
           childRight,
           childUp,
@@ -1812,53 +1799,286 @@ export class BudEngine {
       const rotMatrix = new THREE.Matrix4()
       const worldUp = new THREE.Vector3(0, 1, 0)
       
-      // Create rotation matrix from bone's direction
-      if (Math.abs(bone.direction.dot(worldUp)) < 0.9999) {
-        const right = new THREE.Vector3().crossVectors(worldUp, bone.direction).normalize()
-        const forward = new THREE.Vector3().crossVectors(bone.direction, right).normalize()
-        rotMatrix.makeBasis(right, bone.direction, forward)
-      } else {
-        const right = new THREE.Vector3(1, 0, 0)
-        const forward = new THREE.Vector3(0, 0, 1)
-        rotMatrix.makeBasis(right, bone.direction, forward)
+      // Create consistent basis vectors regardless of angle
+      const boneDir = bone.direction.clone().normalize()
+      // Use world forward (0,0,1) as reference for consistent cross product
+      const boneRight = new THREE.Vector3().crossVectors(worldUp, boneDir).normalize()
+      if (boneRight.lengthSq() < 0.001) {
+        // If bone is aligned with world up, use world forward instead
+        const worldForward = new THREE.Vector3(0, 0, 1)
+        boneRight.crossVectors(worldForward, boneDir).normalize()
       }
+      const boneForward = new THREE.Vector3().crossVectors(boneDir, boneRight).normalize()
+      rotMatrix.makeBasis(boneRight, boneDir, boneForward)
 
-      // Apply twist
+      // Apply twist if any
       if (bone.twist !== 0) {
         const twistMatrix = new THREE.Matrix4().makeRotationAxis(bone.direction, bone.twist)
         rotMatrix.multiply(twistMatrix)
       }
 
-      // Apply to current transform
-      currentTransform.multiply(rotMatrix)
+      // Apply rotation to current transform
+      const worldTransform = currentTransform.clone().multiply(rotMatrix)
 
-      // If this is our target bone, we're done
-      if (boneId === targetBoneId) {
-        return currentTransform
+      // Store transform for this bone
+      this.boneTransforms.set(boneId, worldTransform.clone())
+
+      // Create mesh for this bone at current position with new rotation
+      const geometry = this.createGeometry(part.type, {
+        width: bone.width,
+        length: bone.length
+      })
+
+      const material = new THREE.MeshStandardMaterial({ 
+        color: attributes.color,
+        roughness: 0.7,
+        metalness: 0.2,
+        side: part.type === 'leaf' || part.type === 'flower' ? THREE.DoubleSide : THREE.FrontSide
+      })
+
+      const mesh = new THREE.Mesh(geometry, material)
+      mesh.castShadow = true
+      mesh.receiveShadow = true
+      mesh.frustumCulled = false
+      mesh.userData.boneId = boneId
+      mesh.userData.bodyId = body.id
+      mesh.userData.partId = partId
+      mesh.userData.parentPartIds = Array.from(currentParentIds)
+
+      // Add eyes if this is a head bone and it's a stem
+      if (bone.isHead && part.type === 'stem') {
+        const eyeGroup = new THREE.Group()
+        
+        // Create eyes with flat shading
+        const eyeGeo = new THREE.SphereGeometry(bone.width * 0.4, 12, 8)
+        const eyeMat = new THREE.MeshStandardMaterial({ 
+          color: '#ffffff',
+          roughness: 0.7,
+          metalness: 0.2,
+        })
+        const pupilGeo = new THREE.SphereGeometry(bone.width * 0.2, 8, 8)
+        const pupilMat = new THREE.MeshStandardMaterial({ 
+          color: '#000000',
+          roughness: 0.7,
+          metalness: 0.2,
+        })
+        
+        // Left eye with better positioning
+        const leftEye = new THREE.Mesh(eyeGeo, eyeMat)
+        leftEye.position.set(bone.width * 1.2, bone.length * 0.8, bone.width * 0.8)
+        const leftPupil = new THREE.Mesh(pupilGeo, pupilMat)
+        leftPupil.position.z = bone.width * 0.3
+        leftEye.add(leftPupil)
+        eyeGroup.add(leftEye)
+        
+        // Right eye with better positioning
+        const rightEye = new THREE.Mesh(eyeGeo, eyeMat)
+        rightEye.position.set(-bone.width * 1.2, bone.length * 0.8, bone.width * 0.8)
+        const rightPupil = new THREE.Mesh(pupilGeo, pupilMat)
+        rightPupil.position.z = bone.width * 0.3
+        rightEye.add(rightPupil)
+        eyeGroup.add(rightEye)
+        
+        mesh.add(eyeGroup)
       }
 
-      // Check children of this bone
+      // Position mesh using world transform
+      mesh.position.setFromMatrixPosition(worldTransform)
+      
+      // Extract coordinate system from transform
+      const right = new THREE.Vector3()
+      const up = new THREE.Vector3()
+      const forward = new THREE.Vector3()
+      worldTransform.extractBasis(right, up, forward)
+      
+      // Orient mesh using full basis instead of just up vector
+      mesh.matrix.makeBasis(right, up, forward)
+      mesh.matrix.setPosition(mesh.position)
+      mesh.matrixAutoUpdate = false
+
+      // Add to part group
+      partGroup.add(mesh)
+
+      // Add debug visualization if debug mode is on
+      if (this.debugMode) {
+        const boneStart = new THREE.Vector3().setFromMatrixPosition(worldTransform)
+        const arrowMat = new THREE.LineBasicMaterial({
+          color: 0xffff00,
+          depthTest: false,
+          transparent: true,
+          opacity: 0.8
+        })
+        const arrowHelper = new THREE.ArrowHelper(
+          up,
+          boneStart,
+          bone.length,
+        )
+        arrowHelper.line.material = arrowMat
+        arrowHelper.cone.material = arrowMat
+        arrowHelper.userData.isDebug = true
+        arrowHelper.renderOrder = 999
+        partGroup.add(arrowHelper)
+      }
+
+      // Process child parts
       for (const [childPartId, attachment] of bone.children.entries()) {
-        const childPart = this.parts.get(childPartId)
-        if (!childPart) continue
-
-        // Create attachment point transform
-        const attachTransform = currentTransform.clone()
-        const boneDirection = new THREE.Vector3(0, 1, 0).applyMatrix4(currentTransform)
-        const offset = boneDirection.multiplyScalar(bone.length * attachment.ratio)
+        // Get bone's world transform matrix
+        const boneTransform = worldTransform.clone()
         
-        // Get current position and add offset
-        const attachPosition = new THREE.Vector3().setFromMatrixPosition(currentTransform).add(offset)
-        attachTransform.setPosition(attachPosition)
+        // Get bone start position and direction in world space
+        const boneStart = new THREE.Vector3().setFromMatrixPosition(boneTransform)
         
-        // Apply attachment angle
-        const rotationMatrix = new THREE.Matrix4().makeRotationAxis(boneDirection.normalize(), attachment.angle)
-        attachTransform.multiply(rotationMatrix)
+        // Calculate attachment point along bone
+        const attachPoint = boneStart.clone().add(
+          up.clone().multiplyScalar(bone.length * attachment.ratio)
+        )
 
-        // Recursively process child part
-        const result = this.calculateTransformFromRoot(childPart, targetBoneId, attachTransform)
-        if (result) return result
+        // Create attachment transform matrix
+        const attachmentTransform = new THREE.Matrix4()
+        
+        // Get parent bone's up direction (bone axis)
+        const boneAxis = up.clone().normalize()
+        
+        // Create quaternion for initial orientation aligned with parent bone
+        const alignQuat = new THREE.Quaternion()
+        
+        if (attachment.ratio === 0 || attachment.ratio === 1) {
+          // For end attachments, align with bone direction
+          if (attachment.ratio === 0) {
+            // At start, point opposite to parent direction
+            alignQuat.setFromUnitVectors(new THREE.Vector3(0, 1, 0), boneAxis.clone().negate())
+          } else {
+            // At end, point same as parent direction
+            alignQuat.setFromUnitVectors(new THREE.Vector3(0, 1, 0), boneAxis)
+          }
+        } else {
+          // For side attachments, create perpendicular orientation
+          // First find a perpendicular direction based on attachment angle
+          const perpDir = new THREE.Vector3(
+            Math.cos(attachment.angle),
+            0,
+            Math.sin(attachment.angle)
+          ).normalize()
+          
+          // Transform perpendicular direction by parent's rotation
+          perpDir.applyMatrix4(boneTransform)
+          perpDir.sub(boneStart).normalize()
+          
+          // Add offset from bone surface
+          attachPoint.add(perpDir.clone().multiplyScalar(bone.width * 0.9))
+          
+          // Create quaternion to align with perpendicular direction
+          alignQuat.setFromUnitVectors(new THREE.Vector3(0, 1, 0), perpDir)
+        }
+        
+        // Create rotation matrix from quaternion
+        const rotMatrix = new THREE.Matrix4().makeRotationFromQuaternion(alignQuat)
+        
+        // Extract basis vectors
+        const childRight = new THREE.Vector3(1, 0, 0).applyMatrix4(rotMatrix)
+        const childUp = new THREE.Vector3(0, 1, 0).applyMatrix4(rotMatrix)
+        const childForward = new THREE.Vector3(0, 0, 1).applyMatrix4(rotMatrix)
+        
+        // Create final transform
+        attachmentTransform.makeBasis(
+          childRight,
+          childUp,
+          childForward
+        )
+        attachmentTransform.setPosition(attachPoint)
+        
+        // Recursively render child part
+        this.renderPartHierarchy(childPartId, attachmentTransform, partGroup, currentParentIds, attributes)
+
+        // Add debug visualization if debug mode is on
+        if (this.debugMode) {
+          // Debug vectors with custom materials
+          const arrowMat1 = new THREE.LineBasicMaterial({
+            color: 0xff0000,
+            depthTest: false,
+            transparent: true,
+            opacity: 0.8
+          })
+          const arrowMat2 = new THREE.LineBasicMaterial({
+            color: 0x00ff00,
+            depthTest: false,
+            transparent: true,
+            opacity: 0.8
+          })
+          const arrowMat3 = new THREE.LineBasicMaterial({
+            color: 0x0000ff,
+            depthTest: false,
+            transparent: true,
+            opacity: 0.8
+          })
+
+          // Visualize attachment coordinate system
+          const attachHelper1 = new THREE.ArrowHelper(
+            childRight,
+            attachPoint,
+            bone.width * 2,
+            0xff0000
+          )
+          attachHelper1.line.material = arrowMat1
+          attachHelper1.cone.material = arrowMat1
+          attachHelper1.userData.isDebug = true
+          attachHelper1.renderOrder = 999
+          partGroup.add(attachHelper1)
+
+          const attachHelper2 = new THREE.ArrowHelper(
+            childUp,
+            attachPoint,
+            bone.width * 2,
+            0x00ff00
+          )
+          attachHelper2.line.material = arrowMat2
+          attachHelper2.cone.material = arrowMat2
+          attachHelper2.userData.isDebug = true
+          attachHelper2.renderOrder = 999
+          partGroup.add(attachHelper2)
+
+          const attachHelper3 = new THREE.ArrowHelper(
+            childForward,
+            attachPoint,
+            bone.width * 2,
+            0x0000ff
+          )
+          attachHelper3.line.material = arrowMat3
+          attachHelper3.cone.material = arrowMat3
+          attachHelper3.userData.isDebug = true
+          attachHelper3.renderOrder = 999
+          partGroup.add(attachHelper3)
+
+          // Add negative arrows
+          const attachHelper1Neg = new THREE.ArrowHelper(
+            childRight.clone().negate(),
+            attachPoint,
+            bone.width * 2,
+            0xff0000
+          )
+          attachHelper1Neg.line.material = arrowMat1
+          attachHelper1Neg.cone.material = arrowMat1
+          attachHelper1Neg.userData.isDebug = true
+          attachHelper1Neg.renderOrder = 999
+          partGroup.add(attachHelper1Neg)
+
+          const attachHelper3Neg = new THREE.ArrowHelper(
+            childForward.clone().negate(),
+            attachPoint,
+            bone.width * 2,
+            0x0000ff
+          )
+          attachHelper3Neg.line.material = arrowMat3
+          attachHelper3Neg.cone.material = arrowMat3
+          attachHelper3Neg.userData.isDebug = true
+          attachHelper3Neg.renderOrder = 999
+          partGroup.add(attachHelper3Neg)
+        }
       }
+
+      // After rendering bone and children, translate current transform forward by bone length
+      const translation = new THREE.Matrix4().makeTranslation(0, bone.length, 0)
+      currentTransform.multiply(rotMatrix).multiply(translation)
     }
 
     return currentTransform

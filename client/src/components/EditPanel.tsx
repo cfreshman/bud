@@ -1,4 +1,3 @@
-import './EditPanel.css'
 import { EditableProperties } from '../types'
 
 type EditPanelProps = {
@@ -8,9 +7,18 @@ type EditPanelProps = {
   onShrinkStem?: (id: string) => void
   onDelete?: (id: string) => void
   onClone?: (id: string) => void
+  onFitView?: () => void
 }
 
-export function EditPanel({ selected, onUpdateProperties, onGrowStem, onShrinkStem, onDelete, onClone }: EditPanelProps) {
+export function EditPanel({ 
+  selected, 
+  onUpdateProperties, 
+  onGrowStem, 
+  onShrinkStem, 
+  onDelete, 
+  onClone,
+  onFitView 
+}: EditPanelProps) {
   if (!selected) return null
 
   return (
@@ -149,6 +157,15 @@ export function EditPanel({ selected, onUpdateProperties, onGrowStem, onShrinkSt
           onClick={() => onDelete?.(selected.id)}
         >
           delete
+        </button>
+      </div>
+
+      <div className="edit-row">
+        <button 
+          className="fit-view"
+          onClick={onFitView}
+        >
+          fit view
         </button>
       </div>
     </div>
