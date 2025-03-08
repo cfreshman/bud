@@ -432,20 +432,30 @@ export class BudEngine {
     
     // Get all valid meshes to check for intersection
     const validMeshes: THREE.Object3D[] = []
+    const innerBoneMeshes: THREE.Object3D[] = []
     
     // Add preview meshes
     validMeshes.push(...Array.from(this.partMeshes.values()))
     
-    // Add all plant part meshes
+    // Add all plant part meshes and collect inner bones separately
     this.scene.traverse(child => {
       if (!(child instanceof THREE.Mesh)) return
-      if (!child.userData.boneId) return
-      validMeshes.push(child)
+      
+      if (child.userData.isInnerBone) {
+        innerBoneMeshes.push(child)
+      } else if (child.userData.boneId || child.userData.isPartPreview) {
+        validMeshes.push(child)
+      }
     })
     
-    // Check for intersections with all valid meshes
+    // Check for intersections with inner bones first
     this.raycaster.setFromCamera(this.mouse, this.camera)
-    const intersects = this.raycaster.intersectObjects(validMeshes, false)
+    let intersects = this.raycaster.intersectObjects(innerBoneMeshes, false)
+    
+    // If no inner bone hit, check regular meshes
+    if (intersects.length === 0) {
+      intersects = this.raycaster.intersectObjects(validMeshes, false)
+    }
     
     if (intersects.length > 0) {
       const selectedObject = intersects[0].object
@@ -497,7 +507,7 @@ export class BudEngine {
         return
       }
       
-      // Otherwise this is a plant part mesh
+      // Otherwise this is a plant part mesh or inner bone
       // Find the parent group (part)
       let partGroup = selectedObject.parent
       while (partGroup && !(partGroup instanceof THREE.Group)) {
@@ -509,6 +519,7 @@ export class BudEngine {
         const selectedPart = this.parts.get(partGroup.userData.partId)
         if (!selectedPart) return
 
+        // Use the bone ID from either the inner bone or regular mesh
         this.selectedBoneId = selectedObject.userData.boneId
         this.activePartId = partGroup.userData.partId
 
@@ -937,6 +948,54 @@ export class BudEngine {
       mesh.userData.bodyId = body.id
       mesh.userData.partId = part.id
       mesh.userData.parentPartIds = Array.from(currentParentIds)
+
+      // Add inner bone for stems
+      const isSelectedPart = this.activePartId === part.id
+      if (part.type === 'stem' && isSelectedPart) {
+        // Create inner bone geometry - slightly smaller than outer bone
+        const innerGeo = new THREE.CylinderGeometry(
+          bone.width * 0.3, // Inner width
+          bone.width * 0.3,
+          bone.length * 0.9, // Inner length
+          8
+        )
+        innerGeo.translate(0, bone.length * 0.5, 0) // Center in bone
+
+        // Create material based on selection state
+        const isSelected = this.selectedBoneId === boneId
+        const innerMat = new THREE.MeshStandardMaterial({
+          color: isSelected ? '#ffffff' : '#bbbbbb',
+          roughness: 0.9,
+          metalness: 0.0,
+          depthTest: false,
+          transparent: true,
+          opacity: 0.7
+        })
+
+        const innerMesh = new THREE.Mesh(innerGeo, innerMat)
+        innerMesh.renderOrder = 1 // Ensure renders on top
+        innerMesh.userData.isInnerBone = true
+        innerMesh.userData.boneId = boneId
+        innerMesh.userData.partId = part.id
+        innerMesh.userData.bodyId = body.id
+        
+        // Position using bone transform
+        innerMesh.position.setFromMatrixPosition(worldTransform)
+        
+        // Extract coordinate system from transform
+        const right = new THREE.Vector3()
+        const up = new THREE.Vector3()
+        const forward = new THREE.Vector3()
+        worldTransform.extractBasis(right, up, forward)
+        
+        // Orient mesh using full basis
+        innerMesh.matrix.makeBasis(right, up, forward)
+        innerMesh.matrix.setPosition(innerMesh.position)
+        innerMesh.matrixAutoUpdate = false
+
+        // Add to part group instead of mesh
+        partGroup.add(innerMesh)
+      }
 
       // Add eyes if this is a head bone and it's a stem
       if (bone.isHead && part.type === 'stem') {
@@ -1863,6 +1922,49 @@ export class BudEngine {
       mesh.userData.bodyId = body.id
       mesh.userData.partId = part.id
       mesh.userData.parentPartIds = Array.from(currentParentIds)
+
+      // Add inner bone for stems
+      if (part.type === 'stem') {
+        // Create inner bone geometry - slightly smaller than outer bone
+        const innerGeo = new THREE.CylinderGeometry(
+          bone.width * 0.3, // Inner width
+          bone.width * 0.3,
+          bone.length * 0.9, // Inner length
+          8
+        )
+        innerGeo.translate(0, bone.length * 0.45, 0) // Center in bone
+
+        // Create material based on selection state
+        const isSelected = this.selectedBoneId === boneId
+        const innerMat = new THREE.MeshStandardMaterial({
+          color: isSelected ? '#ffffff' : '#bbbbbb',
+          roughness: 0.9,
+          metalness: 0.0,
+          depthTest: false,
+          transparent: true,
+          opacity: 0.7
+        })
+
+        const innerMesh = new THREE.Mesh(innerGeo, innerMat)
+        innerMesh.renderOrder = 1 // Ensure renders on top
+        
+        // Position using bone transform
+        innerMesh.position.setFromMatrixPosition(worldTransform)
+        
+        // Extract coordinate system from transform
+        const right = new THREE.Vector3()
+        const up = new THREE.Vector3()
+        const forward = new THREE.Vector3()
+        worldTransform.extractBasis(right, up, forward)
+        
+        // Orient mesh using full basis
+        innerMesh.matrix.makeBasis(right, up, forward)
+        innerMesh.matrix.setPosition(innerMesh.position)
+        innerMesh.matrixAutoUpdate = false
+
+        // Add to part group instead of mesh
+        partGroup.add(innerMesh)
+      }
 
       // Add eyes if this is a head bone and it's a stem
       if (bone.isHead && part.type === 'stem') {
