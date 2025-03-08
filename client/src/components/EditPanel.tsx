@@ -77,11 +77,11 @@ export function EditPanel({ selected, onUpdateProperties, onGrowStem, onShrinkSt
           value={selected.theta}
           onChange={(e) => {
             const theta = parseFloat(e.target.value)
-            onUpdateProperties(selected.id, { theta })
+            onUpdateProperties(selected.id, { theta, phi: selected.phi })
           }}
           onInput={(e) => {
             const theta = parseFloat((e.target as HTMLInputElement).value)
-            onUpdateProperties(selected.id, { theta })
+            onUpdateProperties(selected.id, { theta, phi: selected.phi })
           }}
         />
       </div>
@@ -96,11 +96,11 @@ export function EditPanel({ selected, onUpdateProperties, onGrowStem, onShrinkSt
           value={selected.phi}
           onChange={(e) => {
             const phi = parseFloat(e.target.value)
-            onUpdateProperties(selected.id, { phi })
+            onUpdateProperties(selected.id, { theta: selected.theta, phi })
           }}
           onInput={(e) => {
             const phi = parseFloat((e.target as HTMLInputElement).value)
-            onUpdateProperties(selected.id, { phi })
+            onUpdateProperties(selected.id, { theta: selected.theta, phi })
           }}
         />
       </div>

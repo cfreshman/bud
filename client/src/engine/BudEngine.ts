@@ -2244,9 +2244,9 @@ export class BudEngine {
       const phi = updates.phi !== undefined ? updates.phi * Math.PI / 180 : Math.atan2(bone.direction.z, bone.direction.x)
       
       bone.direction.set(
-        Math.sin(theta) * Math.cos(phi),
+        Math.sin(theta) * Math.cos(phi - Math.PI / 2),
         Math.cos(theta),
-        Math.sin(theta) * Math.sin(phi)
+        Math.sin(theta) * Math.sin(phi - Math.PI / 2)
       ).normalize()
     }
 
@@ -2273,4 +2273,4 @@ export class BudEngine {
       this.saveToLocalStorage()
     }
   }
-} 
+      }
