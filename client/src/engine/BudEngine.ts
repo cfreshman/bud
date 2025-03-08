@@ -1023,7 +1023,7 @@ export class BudEngine {
         const perpOffset = localOffset.clone()
           .applyMatrix4(rotationMatrix)
           .normalize()
-          .multiplyScalar(bone.width)
+          .multiplyScalar(bone.width * .9)
         
         // Add offset to attachment point
         attachPoint.add(perpOffset)
@@ -1932,7 +1932,7 @@ export class BudEngine {
     try {
       const serializedPlant = this.serializePlant()
       localStorage.setItem('bud_plant', serializedPlant)
-      console.log('Plant saved to localStorage')
+      // console.log('Plant saved to localStorage')
     } catch (error) {
       console.error('Failed to save plant:', error)
     }
