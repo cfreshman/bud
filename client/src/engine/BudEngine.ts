@@ -2990,11 +2990,15 @@ export class BudEngine {
     const sourcePart = this.parts.get(sourcePartId)
     if (!sourcePart || sourcePart.type === 'stem') return
 
-    // Get properties to apply
+    // Get source bone to get actual dimensions
+    const sourceBone = this.bones.get(boneId)
+    if (!sourceBone) return
+
+    // Get properties to apply - use actual bone dimensions
     const properties = {
       color: sourcePart.attributes.color,
-      length: sourcePart.attributes.length,
-      width: sourcePart.attributes.width
+      length: sourceBone.length,
+      width: sourceBone.width
     }
 
     // Keep track of bodies that need re-rendering
@@ -3006,19 +3010,15 @@ export class BudEngine {
         // Update part attributes
         part.attributes = {
           ...part.attributes,
-          ...properties
+          color: properties.color
         }
 
         // Update bone dimensions
         part.boneIds.forEach(boneId => {
           const bone = this.bones.get(boneId)
           if (bone) {
-            if (properties.length !== undefined) {
-              bone.length = properties.length
-            }
-            if (properties.width !== undefined) {
-              bone.width = properties.width
-            }
+            bone.length = properties.length
+            bone.width = properties.width
           }
         })
 
