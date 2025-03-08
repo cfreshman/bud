@@ -935,7 +935,7 @@ export class BudEngine {
       mesh.frustumCulled = false
       mesh.userData.boneId = boneId
       mesh.userData.bodyId = body.id
-      mesh.userData.partId = partId
+      mesh.userData.partId = part.id
       mesh.userData.parentPartIds = Array.from(currentParentIds)
 
       // Add eyes if this is a head bone and it's a stem
@@ -1790,12 +1790,31 @@ export class BudEngine {
     // Start with parent transform
     let currentTransform = parentTransform.clone()
     
+    // Create a group for this part
+    const partGroup = new THREE.Group()
+    partGroup.userData.partId = part.id
+    
+    // Find the body this part belongs to
+    const body = Array.from(this.bodies.values()).find(b => b.rootPartId === part.id)
+    if (!body) return currentTransform
+    partGroup.userData.bodyId = body.id
+    
+    // Keep track of parent IDs
+    const currentParentIds = new Set<string>()
+    currentParentIds.add(part.id)
+    
+    // Get part attributes
+    const attributes = part.attributes
+    if (!attributes.color) {
+      attributes.color = this.getDefaultColor(part.type)
+    }
+    
     // Process each bone in this part
     for (const boneId of part.boneIds) {
       const bone = this.bones.get(boneId)
       if (!bone) continue
 
-      // Apply bone's local transform
+      // First rotate current transform by bone's direction
       const rotMatrix = new THREE.Matrix4()
       const worldUp = new THREE.Vector3(0, 1, 0)
       
@@ -1842,7 +1861,7 @@ export class BudEngine {
       mesh.frustumCulled = false
       mesh.userData.boneId = boneId
       mesh.userData.bodyId = body.id
-      mesh.userData.partId = partId
+      mesh.userData.partId = part.id
       mesh.userData.parentPartIds = Array.from(currentParentIds)
 
       // Add eyes if this is a head bone and it's a stem
