@@ -72,6 +72,12 @@ function App() {
     engineRef.current.shrinkStemPart(id)
   }
 
+  const handleDelete = (id: string) => {
+    if (!engineRef.current) return
+    console.log('App: Deleting part', { id })
+    engineRef.current.deletePart(id)
+  }
+
   return (
     <div className="app">
       <div ref={containerRef} className="canvas-container" />
@@ -80,6 +86,7 @@ function App() {
         onUpdateProperties={handleUpdateProperties}
         onGrowStem={handleGrowStem}
         onShrinkStem={handleShrinkStem}
+        onDelete={handleDelete}
       />
       <Status />
     </div>

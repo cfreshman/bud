@@ -133,7 +133,7 @@ export class BudEngine {
     
     // Main scene setup
     this.scene = new THREE.Scene()
-    this.scene.background = new THREE.Color('#eeebe6')
+    this.scene.background = new THREE.Color('#111419')
     
     // Initialize event listeners
     this._eventListeners.set('select', new Set())
@@ -166,7 +166,7 @@ export class BudEngine {
     })
     this.renderer.setPixelRatio(window.devicePixelRatio)
     this.renderer.setSize(container.clientWidth, container.clientHeight)
-    this.renderer.setClearColor('#eeebe6', 1)
+    this.renderer.setClearColor('#111419', 1)
     this.renderer.autoClear = true
     this.renderer.sortObjects = true // Enable proper depth sorting
     container.appendChild(this.renderer.domElement)
@@ -203,7 +203,7 @@ export class BudEngine {
     this.scene.add(fillLight)
     
     // Add grid helper with lighter colors
-    const gridHelper = new THREE.GridHelper(10, 10, '#888888', '#000000')
+    const gridHelper = new THREE.GridHelper(10, 10, '#888888', '#dddddd')
     gridHelper.position.y = 0 // Ensure grid is at ground level
     this.scene.add(gridHelper)
     
@@ -277,7 +277,7 @@ export class BudEngine {
 
     // Make sure we're using the composer instead of renderer directly
     this.renderer.autoClear = false // Important for post-processing
-    this.renderer.setClearColor('#eeebe6', 1)
+    this.renderer.setClearColor('#111419', 1)
     
     // Start render loop
     this.animate()
@@ -2323,5 +2323,93 @@ export class BudEngine {
   // Add method to check if bloom is enabled
   isBloomEnabled(): boolean {
     return this.bloomEnabled
+  }
+
+  // Delete a part and all its children recursively
+  deletePart(boneId: string) {
+    // Get part ID from bone ID
+    const partId = this.bonePartIds.get(boneId)
+    if (!partId) return
+
+    const part = this.parts.get(partId)
+    if (!part) return
+
+    // Recursively collect all child parts to delete
+    const partsToDelete = new Set<string>()
+    const collectChildren = (currentPartId: string) => {
+      partsToDelete.add(currentPartId)
+      const currentPart = this.parts.get(currentPartId)
+      if (!currentPart) return
+
+      // For each bone in the part
+      for (const boneId of currentPart.boneIds) {
+        const bone = this.bones.get(boneId)
+        if (!bone) continue
+
+        // For each child of the bone
+        for (const [childPartId] of bone.children.entries()) {
+          collectChildren(childPartId)
+        }
+      }
+    }
+    collectChildren(partId)
+
+    // Remove from parent's children if it has a parent
+    if (part.parentBoneId) {
+      const parentBone = this.bones.get(part.parentBoneId)
+      if (parentBone) {
+        parentBone.children.delete(partId)
+      }
+    }
+
+    // Delete all collected parts and their bones
+    for (const partIdToDelete of partsToDelete) {
+      const partToDelete = this.parts.get(partIdToDelete)
+      if (!partToDelete) continue
+
+      // Delete all bones for this part
+      for (const boneId of partToDelete.boneIds) {
+        this.bones.delete(boneId)
+        this.boneTransforms.delete(boneId)
+        this.bonePartIds.delete(boneId)
+      }
+
+      // Remove from roots if it was a root
+      this.roots.delete(partIdToDelete)
+
+      // Remove from parts map
+      this.parts.delete(partIdToDelete)
+      this.partParentIds.delete(partIdToDelete)
+
+      // Remove any body that had this as root
+      for (const [bodyId, body] of this.bodies.entries()) {
+        if (body.rootPartId === partIdToDelete) {
+          this.bodies.delete(bodyId)
+        }
+      }
+    }
+
+    // If the deleted part had a parent, re-render its root
+    if (part.parentBoneId) {
+      const parentBone = this.bones.get(part.parentBoneId)
+      if (parentBone) {
+        let currentPart = this.parts.get(parentBone.partId)
+        while (currentPart?.parentBoneId) {
+          const parentBone = this.bones.get(currentPart.parentBoneId)
+          if (!parentBone) break
+          currentPart = this.parts.get(parentBone.partId)
+        }
+        if (currentPart) {
+          const body = Array.from(this.bodies.values())
+            .find(b => b.rootPartId === currentPart!.id)
+          if (body) {
+            this.renderBody(body.id)
+          }
+        }
+      }
+    }
+
+    this.saveToLocalStorage()
+    this.notifyDeselect()
   }
 }

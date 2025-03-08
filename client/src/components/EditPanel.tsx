@@ -5,9 +5,10 @@ type EditPanelProps = {
   onUpdateProperties: (id: string, updates: Partial<EditableProperties>) => void
   onGrowStem?: (id: string) => void
   onShrinkStem?: (id: string) => void
+  onDelete?: (id: string) => void
 }
 
-export function EditPanel({ selected, onUpdateProperties, onGrowStem, onShrinkStem }: EditPanelProps) {
+export function EditPanel({ selected, onUpdateProperties, onGrowStem, onShrinkStem, onDelete }: EditPanelProps) {
   if (!selected) return null
 
   return (
@@ -134,6 +135,15 @@ export function EditPanel({ selected, onUpdateProperties, onGrowStem, onShrinkSt
           </button>
         </div>
       )}
+
+      <div className="edit-row">
+        <button 
+          onClick={() => onDelete?.(selected.id)}
+          style={{ backgroundColor: '#ff4444', color: 'white' }}
+        >
+          delete
+        </button>
+      </div>
     </div>
   )
 } 
