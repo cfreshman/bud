@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { EditableProperties } from '../types'
 // @ts-ignore
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls'
 // @ts-ignore
@@ -2411,5 +2412,132 @@ export class BudEngine {
 
     this.saveToLocalStorage()
     this.notifyDeselect()
+  }
+
+  private clonePartHierarchy(sourceBoneId: string, newParentBoneId?: string): string | null {
+    // Get source part info
+    const sourcePartId = this.bonePartIds.get(sourceBoneId)
+    if (!sourcePartId) return null
+    
+    const sourcePart = this.parts.get(sourcePartId)
+    if (!sourcePart) return null
+
+    // Create new part
+    const newPartId = Math.random().toString(36).substr(2, 9)
+    const newPart: Part = {
+      id: newPartId,
+      type: sourcePart.type,
+      attributes: { ...sourcePart.attributes },
+      boneIds: [],
+      parentBoneId: newParentBoneId
+    }
+
+    // Clone each bone in the part
+    for (const sourceBoneId of sourcePart.boneIds) {
+      const sourceBone = this.bones.get(sourceBoneId)
+      if (!sourceBone) continue
+
+      // Create new bone with same properties
+      const newBoneId = this.addBone({
+        partId: newPartId,
+        position: new THREE.Vector3(), // Position will be set by transform
+        length: sourceBone.length,
+        width: sourceBone.width,
+        isHead: sourceBone.isHead
+      })
+
+      // Copy bone properties
+      const newBone = this.bones.get(newBoneId)
+      if (!newBone) continue // Skip if bone creation failed
+
+      newBone.direction.copy(sourceBone.direction)
+      newBone.twist = sourceBone.twist
+
+      newPart.boneIds.push(newBoneId)
+
+      // Recursively clone children
+      for (const [childPartId, attachment] of sourceBone.children.entries()) {
+        const childPart = this.parts.get(childPartId)
+        if (!childPart) continue
+
+        const childBoneId = childPart.boneIds[0]
+        if (!childBoneId) continue
+
+        const newChildPartId = this.clonePartHierarchy(childBoneId, newBoneId)
+        if (newChildPartId) {
+          newBone.children.set(newChildPartId, { ...attachment })
+        }
+      }
+    }
+
+    // Store the new part
+    this.parts.set(newPartId, newPart)
+    return newPartId
+  }
+
+  clonePart(boneId: string) {
+    // Get part ID from bone ID
+    const partId = this.bonePartIds.get(boneId)
+    if (!partId) {
+      console.error('BudEngine: No part found for bone', boneId)
+      return
+    }
+
+    const sourcePart = this.parts.get(partId)
+    if (!sourcePart) {
+      console.error('BudEngine: Part not found', partId)
+      return
+    }
+
+    // Use main pot position instead of part type pot
+    if (!this.mainPot) {
+      console.error('BudEngine: Main pot not found')
+      return
+    }
+
+    // Create position slightly in front of the main pot
+    const potPosition = this.mainPot.position.clone()
+    const offset = new THREE.Vector3(0, -.5, 1.5) // Slightly above and in front
+    const newPosition = potPosition.clone().add(offset)
+
+    // Clone the entire hierarchy
+    const newPartId = this.clonePartHierarchy(boneId)
+    if (!newPartId) {
+      console.error('BudEngine: Failed to clone part hierarchy')
+      return
+    }
+
+    // Add to roots since it's a new independent part
+    this.roots.add(newPartId)
+
+    // Create body for new part
+    const body = this.createBodyForPart(newPartId)
+    if (body) {
+      // Set the body position
+      body.transform.position.copy(newPosition)
+      
+      this.renderBody(body.id)
+      this.saveToLocalStorage()
+
+      // Select the first bone of the new part
+      const newPart = this.parts.get(newPartId)
+      if (newPart && newPart.boneIds.length > 0) {
+        const newBoneId = newPart.boneIds[0]
+        const newBone = this.bones.get(newBoneId)
+        if (newBone) {
+          this.notifySelect({
+            id: newBoneId,
+            type: sourcePart.type,
+            position: newPosition.toArray(),
+            color: sourcePart.attributes.color,
+            length: newBone.length,
+            width: newBone.width,
+            theta: Math.acos(newBone.direction.y) * 180 / Math.PI,
+            phi: Math.atan2(newBone.direction.z, newBone.direction.x) * 180 / Math.PI,
+            twist: newBone.twist * 180 / Math.PI
+          })
+        }
+      }
+    }
   }
 }

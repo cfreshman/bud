@@ -88,6 +88,17 @@
   background: #333333;
 }
 
+.edit-row button.clone {
+  background: #111419;
+  border-color: #44ff44;
+  color: #44ff44;
+}
+
+.edit-row button.clone:hover {
+  background: #44ff44;
+  color: #ffffff;
+}
+
 .edit-row button.delete {
   background: #111419;
   border-color: #ff4444;

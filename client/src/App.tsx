@@ -78,6 +78,15 @@ function App() {
     engineRef.current.deletePart(id)
   }
 
+  const handleClone = (id: string) => {
+    if (!engineRef.current || !selected) return
+    console.log('App: Cloning part', { id })
+    engineRef.current.clonePart(id, {
+      ...selected,
+      position: [selected.position[0] + 0.2, selected.position[1], selected.position[2] + 0.2]
+    })
+  }
+
   return (
     <div className="app">
       <div ref={containerRef} className="canvas-container" />
@@ -87,6 +96,7 @@ function App() {
         onGrowStem={handleGrowStem}
         onShrinkStem={handleShrinkStem}
         onDelete={handleDelete}
+        onClone={handleClone}
       />
       <Status />
     </div>

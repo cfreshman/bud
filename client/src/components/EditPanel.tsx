@@ -7,9 +7,10 @@ type EditPanelProps = {
   onGrowStem?: (id: string) => void
   onShrinkStem?: (id: string) => void
   onDelete?: (id: string) => void
+  onClone?: (id: string) => void
 }
 
-export function EditPanel({ selected, onUpdateProperties, onGrowStem, onShrinkStem, onDelete }: EditPanelProps) {
+export function EditPanel({ selected, onUpdateProperties, onGrowStem, onShrinkStem, onDelete, onClone }: EditPanelProps) {
   if (!selected) return null
 
   return (
@@ -137,6 +138,12 @@ export function EditPanel({ selected, onUpdateProperties, onGrowStem, onShrinkSt
       )}
 
       <div className="edit-row">
+        <button 
+          className="clone"
+          onClick={() => onClone?.(selected.id)}
+        >
+          clone
+        </button>
         <button 
           className="delete"
           onClick={() => onDelete?.(selected.id)}
