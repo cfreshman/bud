@@ -819,6 +819,29 @@ export class BudEngine {
     this.renderPartHierarchy(body.rootPartId, worldTransform)
   }
 
+  private calculateBoneBasis(boneDir: THREE.Vector3): {
+    right: THREE.Vector3,
+    forward: THREE.Vector3
+  } {
+    const normalizedDir = boneDir.clone().normalize()
+    
+    // Find a perpendicular vector to use as right
+    // First try cross product with world up
+    const worldUp = new THREE.Vector3(0, 1, 0)
+    let right = new THREE.Vector3().crossVectors(normalizedDir, worldUp).normalize()
+    
+    // If bone is aligned with world up, use world forward instead
+    if (right.lengthSq() < 0.001) {
+      const worldForward = new THREE.Vector3(0, 0, 1)
+      right = new THREE.Vector3().crossVectors(normalizedDir, worldForward).normalize()
+    }
+    
+    // Calculate forward by crossing right with bone direction
+    const forward = new THREE.Vector3().crossVectors(right, normalizedDir).normalize()
+    
+    return { right, forward }
+  }
+
   private renderPartHierarchy(
     partId: string, 
     parentWorldTransform: THREE.Matrix4, 
@@ -922,23 +945,13 @@ export class BudEngine {
 
       // First rotate current transform by bone's direction
       const rotMatrix = new THREE.Matrix4()
-      const worldUp = new THREE.Vector3(0, 1, 0)
+      const worldUpVec = new THREE.Vector3(0, 1, 0)
       
       // Create consistent basis vectors regardless of angle
       const boneDir = bone.direction.clone().normalize()
       
-      // Always use world forward (0,0,1) as primary reference
-      const worldForward = new THREE.Vector3(0, 0, 1)
-      const boneRight = new THREE.Vector3().crossVectors(boneDir, worldForward).normalize()
-      
-      // If bone is aligned with world forward, use world up instead
-      if (boneRight.lengthSq() < 0.001) {
-        const worldUp = new THREE.Vector3(0, 1, 0)
-        boneRight.crossVectors(boneDir, worldUp).normalize()
-      }
-      
-      // Calculate forward by crossing bone direction with right
-      const boneForward = new THREE.Vector3().crossVectors(boneRight, boneDir).normalize()
+      // Calculate basis vectors
+      const { right: boneRight, forward: boneForward } = this.calculateBoneBasis(boneDir)
       
       // First apply twist around local Y axis
       const twistMatrix = new THREE.Matrix4().makeRotationY(bone.twist)
@@ -1119,17 +1132,20 @@ export class BudEngine {
         // Get parent bone's up direction (bone axis)
         const boneAxis = up.clone().normalize()
         
-        // Create quaternion for initial orientation aligned with parent bone
-        const alignQuat = new THREE.Quaternion()
+        let childUp: THREE.Vector3
+        let childForward: THREE.Vector3
         
         if (attachment.ratio === 0 || attachment.ratio === 1) {
-          // For end attachments, align with bone direction
+          // For end attachments, use parent bone direction as up
+          childUp = boneAxis.clone()
+          
+          // Use parent's forward as child's forward to maintain same rotation
+          childForward = forward.clone()
+          
+          // If at start of bone, flip both vectors
           if (attachment.ratio === 0) {
-            // At start, point opposite to parent direction
-            alignQuat.setFromUnitVectors(new THREE.Vector3(0, 1, 0), boneAxis.clone().negate())
-          } else {
-            // At end, point same as parent direction
-            alignQuat.setFromUnitVectors(new THREE.Vector3(0, 1, 0), boneAxis)
+            childUp.negate()
+            childForward.negate()
           }
         } else {
           // For side attachments, create perpendicular orientation
@@ -1147,17 +1163,15 @@ export class BudEngine {
           // Add offset from bone surface
           attachPoint.add(perpDir.clone().multiplyScalar(bone.width * 0.9))
           
-          // Create quaternion to align with perpendicular direction
-          alignQuat.setFromUnitVectors(new THREE.Vector3(0, 1, 0), perpDir)
+          // Use perpDir as up and boneAxis as forward
+          childUp = perpDir
+          childForward = boneAxis.clone()
         }
         
-        // Create rotation matrix from quaternion
-        const rotMatrix = new THREE.Matrix4().makeRotationFromQuaternion(alignQuat)
-        
-        // Extract basis vectors
-        const childRight = new THREE.Vector3(1, 0, 0).applyMatrix4(rotMatrix)
-        const childUp = new THREE.Vector3(0, 1, 0).applyMatrix4(rotMatrix)
-        const childForward = new THREE.Vector3(0, 0, 1).applyMatrix4(rotMatrix)
+        // Calculate right vector from forward and up
+        const childRight = new THREE.Vector3().crossVectors(childForward, childUp).normalize()
+        // Recalculate up to ensure orthogonality
+        childUp.crossVectors(childRight, childForward).normalize()
         
         // Create final transform
         attachmentTransform.makeBasis(
@@ -1905,23 +1919,13 @@ export class BudEngine {
 
       // First rotate current transform by bone's direction
       const rotMatrix = new THREE.Matrix4()
-      const worldUp = new THREE.Vector3(0, 1, 0)
+      const worldUpVec = new THREE.Vector3(0, 1, 0)
       
       // Create consistent basis vectors regardless of angle
       const boneDir = bone.direction.clone().normalize()
       
-      // Always use world forward (0,0,1) as primary reference
-      const worldForward = new THREE.Vector3(0, 0, 1)
-      const boneRight = new THREE.Vector3().crossVectors(boneDir, worldForward).normalize()
-      
-      // If bone is aligned with world forward, use world up instead
-      if (boneRight.lengthSq() < 0.001) {
-        const worldUp = new THREE.Vector3(0, 1, 0)
-        boneRight.crossVectors(boneDir, worldUp).normalize()
-      }
-      
-      // Calculate forward by crossing bone direction with right
-      const boneForward = new THREE.Vector3().crossVectors(boneRight, boneDir).normalize()
+      // Calculate basis vectors
+      const { right: boneRight, forward: boneForward } = this.calculateBoneBasis(boneDir)
       
       // First apply twist around local Y axis
       const twistMatrix = new THREE.Matrix4().makeRotationY(bone.twist)
@@ -2097,17 +2101,20 @@ export class BudEngine {
         // Get parent bone's up direction (bone axis)
         const boneAxis = up.clone().normalize()
         
-        // Create quaternion for initial orientation aligned with parent bone
-        const alignQuat = new THREE.Quaternion()
+        let childUp: THREE.Vector3
+        let childForward: THREE.Vector3
         
         if (attachment.ratio === 0 || attachment.ratio === 1) {
-          // For end attachments, align with bone direction
+          // For end attachments, use parent bone direction as up
+          childUp = boneAxis.clone()
+          
+          // Use parent's forward as child's forward to maintain same rotation
+          childForward = forward.clone()
+          
+          // If at start of bone, flip both vectors
           if (attachment.ratio === 0) {
-            // At start, point opposite to parent direction
-            alignQuat.setFromUnitVectors(new THREE.Vector3(0, 1, 0), boneAxis.clone().negate())
-          } else {
-            // At end, point same as parent direction
-            alignQuat.setFromUnitVectors(new THREE.Vector3(0, 1, 0), boneAxis)
+            childUp.negate()
+            childForward.negate()
           }
         } else {
           // For side attachments, create perpendicular orientation
@@ -2125,17 +2132,15 @@ export class BudEngine {
           // Add offset from bone surface
           attachPoint.add(perpDir.clone().multiplyScalar(bone.width * 0.9))
           
-          // Create quaternion to align with perpendicular direction
-          alignQuat.setFromUnitVectors(new THREE.Vector3(0, 1, 0), perpDir)
+          // Use perpDir as up and boneAxis as forward
+          childUp = perpDir
+          childForward = boneAxis.clone()
         }
         
-        // Create rotation matrix from quaternion
-        const rotMatrix = new THREE.Matrix4().makeRotationFromQuaternion(alignQuat)
-        
-        // Extract basis vectors
-        const childRight = new THREE.Vector3(1, 0, 0).applyMatrix4(rotMatrix)
-        const childUp = new THREE.Vector3(0, 1, 0).applyMatrix4(rotMatrix)
-        const childForward = new THREE.Vector3(0, 0, 1).applyMatrix4(rotMatrix)
+        // Calculate right vector from forward and up
+        const childRight = new THREE.Vector3().crossVectors(childForward, childUp).normalize()
+        // Recalculate up to ensure orthogonality
+        childUp.crossVectors(childRight, childForward).normalize()
         
         // Create final transform
         attachmentTransform.makeBasis(
