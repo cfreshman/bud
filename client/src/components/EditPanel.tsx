@@ -81,29 +81,10 @@ export function EditPanel({
         <span>θ angle</span>
         <input
           type="range"
-          min="0"
-          max="180"
+          min="-90"
+          max="90"
           step="5"
-          value={selected.theta}
-          onChange={(e) => {
-            const theta = parseFloat(e.target.value)
-            onUpdateProperties(selected.id, { theta, phi: selected.phi })
-          }}
-          onInput={(e) => {
-            const theta = parseFloat((e.target as HTMLInputElement).value)
-            onUpdateProperties(selected.id, { theta, phi: selected.phi })
-          }}
-        />
-      </div>
-
-      <div className="edit-row">
-        <span>φ angle</span>
-        <input
-          type="range"
-          min="0"
-          max="360"
-          step="5"
-          value={selected.phi}
+          value={((selected.phi % 360 + 540) % 360) - 180}
           onChange={(e) => {
             const phi = parseFloat(e.target.value)
             onUpdateProperties(selected.id, { theta: selected.theta, phi })
@@ -113,16 +94,37 @@ export function EditPanel({
             onUpdateProperties(selected.id, { theta: selected.theta, phi })
           }}
         />
+        <span className="value">{Math.round(((selected.phi % 360 + 540) % 360) - 180)}°</span>
+      </div>
+
+      <div className="edit-row">
+        <span>φ angle</span>
+        <input
+          type="range"
+          min="-90"
+          max="90"
+          step="5"
+          value={((selected.theta % 360 + 540) % 360) - 180}
+          onChange={(e) => {
+            const theta = parseFloat(e.target.value)
+            onUpdateProperties(selected.id, { theta, phi: selected.phi })
+          }}
+          onInput={(e) => {
+            const theta = parseFloat((e.target as HTMLInputElement).value)
+            onUpdateProperties(selected.id, { theta, phi: selected.phi })
+          }}
+        />
+        <span className="value">{Math.round(((selected.theta % 360 + 540) % 360) - 180)}°</span>
       </div>
 
       <div className="edit-row">
         <span>twist</span>
         <input
           type="range"
-          min="0"
-          max="360"
+          min="-180"
+          max="180"
           step="5"
-          value={selected.twist}
+          value={((selected.twist % 360 + 540) % 360) - 180}
           onChange={(e) => {
             const twist = parseFloat(e.target.value)
             onUpdateProperties(selected.id, { twist })
@@ -132,6 +134,7 @@ export function EditPanel({
             onUpdateProperties(selected.id, { twist })
           }}
         />
+        <span className="value">{Math.round(((selected.twist % 360 + 540) % 360) - 180)}°</span>
       </div>
       
       {selected.type === 'stem' && onGrowStem && onShrinkStem && (

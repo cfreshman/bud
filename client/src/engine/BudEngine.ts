@@ -208,6 +208,27 @@ export class BudEngine {
     gridHelper.position.y = 0 // Ensure grid is at ground level
     this.scene.add(gridHelper)
     
+    // Add forward Z debug arrow
+    const forwardArrowMat = new THREE.LineBasicMaterial({
+      color: 0x0000ff,
+      depthTest: false,
+      transparent: true,
+      opacity: 0.8
+    })
+    const forwardArrow = new THREE.ArrowHelper(
+      new THREE.Vector3(0, 0, 1), // Direction is +Z
+      new THREE.Vector3(0, 0, 0), // Start at origin
+      .67, // Length of 5 units
+      0x0000ff, // Blue color
+      .1, // Head length
+      .1 // Head width
+    )
+    forwardArrow.line.material = forwardArrowMat
+    forwardArrow.cone.material = forwardArrowMat
+    forwardArrow.userData.isDebug = true
+    forwardArrow.renderOrder = 999
+    this.scene.add(forwardArrow)
+    
     // Add invisible ground plane for better intersection
     const groundGeo = new THREE.PlaneGeometry(10, 10)
     const groundMat = new THREE.MeshBasicMaterial({ 
@@ -905,24 +926,31 @@ export class BudEngine {
       
       // Create consistent basis vectors regardless of angle
       const boneDir = bone.direction.clone().normalize()
-      // Use world forward (0,0,1) as reference for consistent cross product
-      const boneRight = new THREE.Vector3().crossVectors(worldUp, boneDir).normalize()
+      
+      // Always use world forward (0,0,1) as primary reference
+      const worldForward = new THREE.Vector3(0, 0, 1)
+      const boneRight = new THREE.Vector3().crossVectors(boneDir, worldForward).normalize()
+      
+      // If bone is aligned with world forward, use world up instead
       if (boneRight.lengthSq() < 0.001) {
-        // If bone is aligned with world up, use world forward instead
-        const worldForward = new THREE.Vector3(0, 0, 1)
-        boneRight.crossVectors(worldForward, boneDir).normalize()
+        const worldUp = new THREE.Vector3(0, 1, 0)
+        boneRight.crossVectors(boneDir, worldUp).normalize()
       }
-      const boneForward = new THREE.Vector3().crossVectors(boneDir, boneRight).normalize()
+      
+      // Calculate forward by crossing bone direction with right
+      const boneForward = new THREE.Vector3().crossVectors(boneRight, boneDir).normalize()
+      
+      // First apply twist around local Y axis
+      const twistMatrix = new THREE.Matrix4().makeRotationY(bone.twist)
+      
+      // Then create and apply direction rotation matrix
       rotMatrix.makeBasis(boneRight, boneDir, boneForward)
-
-      // Apply twist if any
-      if (bone.twist !== 0) {
-        const twistMatrix = new THREE.Matrix4().makeRotationAxis(bone.direction, bone.twist)
-        rotMatrix.multiply(twistMatrix)
-      }
+      
+      // Combine transforms in correct order: twist first, then direction
+      const finalMatrix = rotMatrix.multiply(twistMatrix)
 
       // Apply rotation to current transform
-      const worldTransform = currentTransform.clone().multiply(rotMatrix)
+      const worldTransform = currentTransform.clone().multiply(finalMatrix)
 
       // Store transform for this bone
       this.boneTransforms.set(boneId, worldTransform.clone())
@@ -1527,8 +1555,9 @@ export class BudEngine {
     }
 
     // Get bone angles
-    const theta = Math.acos(bone.direction.y) * 180 / Math.PI
-    const phi = Math.atan2(bone.direction.z, bone.direction.x) * 180 / Math.PI
+    const dir = bone.direction.clone().normalize()
+    const theta = Math.asin(dir.x) * 180 / Math.PI
+    const phi = Math.asin(dir.z / Math.cos(theta * Math.PI / 180)) * 180 / Math.PI
     const twist = bone.twist * 180 / Math.PI
 
     // Use the provided color if it exists, otherwise use the part's color attribute
@@ -1541,8 +1570,8 @@ export class BudEngine {
       length: bone.length,
       width: bone.width,
       theta,
-      phi: phi < 0 ? phi + 360 : phi, // Convert to 0-360 range
-      twist: twist < 0 ? twist + 360 : twist // Convert to 0-360 range
+      phi,
+      twist
     }
     
     if (this.onSelect) {
@@ -1879,24 +1908,31 @@ export class BudEngine {
       
       // Create consistent basis vectors regardless of angle
       const boneDir = bone.direction.clone().normalize()
-      // Use world forward (0,0,1) as reference for consistent cross product
-      const boneRight = new THREE.Vector3().crossVectors(worldUp, boneDir).normalize()
+      
+      // Always use world forward (0,0,1) as primary reference
+      const worldForward = new THREE.Vector3(0, 0, 1)
+      const boneRight = new THREE.Vector3().crossVectors(boneDir, worldForward).normalize()
+      
+      // If bone is aligned with world forward, use world up instead
       if (boneRight.lengthSq() < 0.001) {
-        // If bone is aligned with world up, use world forward instead
-        const worldForward = new THREE.Vector3(0, 0, 1)
-        boneRight.crossVectors(worldForward, boneDir).normalize()
+        const worldUp = new THREE.Vector3(0, 1, 0)
+        boneRight.crossVectors(boneDir, worldUp).normalize()
       }
-      const boneForward = new THREE.Vector3().crossVectors(boneDir, boneRight).normalize()
+      
+      // Calculate forward by crossing bone direction with right
+      const boneForward = new THREE.Vector3().crossVectors(boneRight, boneDir).normalize()
+      
+      // First apply twist around local Y axis
+      const twistMatrix = new THREE.Matrix4().makeRotationY(bone.twist)
+      
+      // Then create and apply direction rotation matrix
       rotMatrix.makeBasis(boneRight, boneDir, boneForward)
-
-      // Apply twist if any
-      if (bone.twist !== 0) {
-        const twistMatrix = new THREE.Matrix4().makeRotationAxis(bone.direction, bone.twist)
-        rotMatrix.multiply(twistMatrix)
-      }
+      
+      // Combine transforms in correct order: twist first, then direction
+      const finalMatrix = rotMatrix.multiply(twistMatrix)
 
       // Apply rotation to current transform
-      const worldTransform = currentTransform.clone().multiply(rotMatrix)
+      const worldTransform = currentTransform.clone().multiply(finalMatrix)
 
       // Store transform for this bone
       this.boneTransforms.set(boneId, worldTransform.clone())
@@ -2622,22 +2658,32 @@ export class BudEngine {
       }
     }
 
-    // Update bone angles
-    if (updates.theta !== undefined || updates.phi !== undefined) {
-      // Convert spherical coordinates to direction vector
-      const theta = updates.theta !== undefined ? updates.theta * Math.PI / 180 : Math.acos(bone.direction.y)
-      const phi = updates.phi !== undefined ? updates.phi * Math.PI / 180 : Math.atan2(bone.direction.z, bone.direction.x)
-      
-      bone.direction.set(
-        Math.sin(theta) * Math.cos(phi - Math.PI / 2),
-        Math.cos(theta),
-        Math.sin(theta) * Math.sin(phi - Math.PI / 2)
-      ).normalize()
-    }
-
-    // Update bone twist
+    // Update bone twist first
     if (updates.twist !== undefined) {
       bone.twist = updates.twist * Math.PI / 180
+    }
+
+    // Then update bone angles if needed
+    if (updates.theta !== undefined || updates.phi !== undefined) {
+      // Convert angles to radians
+      // theta: XY angle (-90 to +90, 0 = vertical, + = tilt left, - = tilt right)
+      // phi: XZ angle (-90 to +90, 0 = vertical, + = tilt back, - = tilt forward)
+      const thetaRad = updates.theta !== undefined 
+        ? updates.theta * Math.PI / 180
+        : Math.atan2(bone.direction.x, bone.direction.y)
+      const phiRad = updates.phi !== undefined 
+        ? updates.phi * Math.PI / 180
+        : Math.atan2(bone.direction.z, bone.direction.y)
+
+      // Convert from spherical angles to direction vector
+      // First calculate the vertical component
+      const y = Math.cos(thetaRad) * Math.cos(phiRad)
+      
+      // Then calculate horizontal components
+      const x = Math.sin(thetaRad)
+      const z = Math.sin(phiRad) * Math.cos(thetaRad)
+      
+      bone.direction.set(x, y, z).normalize()
     }
 
     // Find root part and render entire body
@@ -2876,8 +2922,8 @@ export class BudEngine {
             color: sourcePart.attributes.color,
             length: newBone.length,
             width: newBone.width,
-            theta: Math.acos(newBone.direction.y) * 180 / Math.PI,
-            phi: Math.atan2(newBone.direction.z, newBone.direction.x) * 180 / Math.PI,
+            theta: Math.asin(newBone.direction.x) * 180 / Math.PI,
+            phi: Math.asin(newBone.direction.z / Math.cos(Math.asin(newBone.direction.x))) * 180 / Math.PI,
             twist: newBone.twist * 180 / Math.PI
           })
         }
