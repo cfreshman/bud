@@ -4,7 +4,6 @@ import { PartType } from './engine/BudEngine'
 export type EditableProperties = {
   id: string
   type: PartType
-  position: [number, number, number]
   
   // Part-specific properties
   color: string

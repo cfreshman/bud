@@ -11,8 +11,6 @@ import { OutlinePass } from 'three/examples/jsm/postprocessing/OutlinePass'
 // @ts-ignore
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass'
 import { InputManager } from './InputManager'
-import { EngineUtils } from './EngineUtils'
-import { PlantData } from './types'
 
 export type PartType = 'stem' | 'leaf' | 'thorn' | 'flower'
 
@@ -75,34 +73,48 @@ type PartPreview = {
 type EventCallback = (data: any) => void
 type EventType = 'select' | 'deselect'
 
-export class BudEngine extends EngineUtils {
-  protected bodies: Map<string, Body> = new Map()
-  protected parts: Map<string, Part> = new Map()
-  protected bones: Map<string, Bone> = new Map()
-  protected roots: Set<string> = new Set()
-  protected partParentIds: Map<string, Set<string>> = new Map()
-  protected uiScene: THREE.Scene
-  protected uiCamera: THREE.OrthographicCamera
-  protected partPreviews: PartPreview[] = []
-  protected selectedPartType?: PartType
-  protected inputManager: InputManager
-  protected partPots: Map<PartType, THREE.Mesh> = new Map()
-  protected partMeshes: Map<PartType, THREE.Mesh> = new Map()
-  protected mainPot?: THREE.Mesh
-  protected mainDirt?: THREE.Mesh
-  protected plantingArea: THREE.Vector3 = new THREE.Vector3(0, 0.4, 0)
-  protected plantingRadius: number = 0.5
-  protected _eventListeners: Map<EventType, Set<EventCallback>> = new Map()
-  protected dragOffset: THREE.Vector3 = new THREE.Vector3()
-  protected mouseDown = false
-  protected onSelect?: (data: { id: string, type: PartType, position: [number, number, number], color?: string, length: number, width: number, theta?: number, phi?: number, twist?: number }) => void
-  protected onDeselect?: () => void
-  protected bloomEnabled: boolean = true
-  protected partAdded: boolean = false
-  protected isDragging = false
-  protected dragStartPosition = new THREE.Vector3()
-  protected groundPlane!: THREE.Mesh
-
+export class BudEngine {
+  private bodies: Map<string, Body> = new Map()
+  private parts: Map<string, Part> = new Map()
+  private bones: Map<string, Bone> = new Map()
+  private roots: Set<string> = new Set()
+  private partParentIds: Map<string, Set<string>> = new Map()
+  private scene: THREE.Scene
+  private uiScene: THREE.Scene
+  private camera: THREE.PerspectiveCamera
+  private uiCamera: THREE.OrthographicCamera
+  private renderer: THREE.WebGLRenderer
+  private partPreviews: PartPreview[] = []
+  private activePartId?: string
+  private selectedPartType?: PartType
+  private raycaster = new THREE.Raycaster()
+  private mouse = new THREE.Vector2()
+  private dragStartPosition = new THREE.Vector3()
+  private isDragging = false
+  private controls: OrbitControls
+  private inputManager: InputManager
+  private partPots: Map<PartType, THREE.Mesh> = new Map()
+  private partMeshes: Map<PartType, THREE.Mesh> = new Map()
+  private mainPot?: THREE.Mesh
+  private mainDirt?: THREE.Mesh
+  private plantingArea: THREE.Vector3 = new THREE.Vector3(0, 0.4, 0)
+  private plantingRadius: number = 0.5
+  private _eventListeners: Map<EventType, Set<EventCallback>> = new Map()
+  private selectedBoneId?: string
+  private composer: EffectComposer
+  private outlinePass: OutlinePass
+  private bloomPass: UnrealBloomPass
+  private dragOffset: THREE.Vector3 = new THREE.Vector3()
+  private groundPlane: THREE.Mesh
+  private mouseDown = false
+  private onSelect?: (data: { id: string, type: PartType, position: [number, number, number], color?: string, length: number, width: number, theta?: number, phi?: number, twist?: number }) => void
+  private onDeselect?: () => void
+  private debugMode: boolean = false
+  private bloomEnabled: boolean = true
+  private boneTransforms: Map<string, THREE.Matrix4> = new Map()
+  private partAdded: boolean = false
+  private bonePartIds: Map<string, string> = new Map()
+  
   constructor(container: HTMLElement, callbacks?: { 
     onSelect?: (data: { 
       id: string
@@ -117,9 +129,12 @@ export class BudEngine extends EngineUtils {
     }) => void
     onDeselect?: () => void 
   }) {
-    super(container)
     this.onSelect = callbacks?.onSelect
     this.onDeselect = callbacks?.onDeselect
+    
+    // Main scene setup
+    this.scene = new THREE.Scene()
+    this.scene.background = new THREE.Color('#111419')
     
     // Initialize event listeners
     this._eventListeners.set('select', new Set())
@@ -128,8 +143,13 @@ export class BudEngine extends EngineUtils {
     // UI scene setup
     this.uiScene = new THREE.Scene()
     
-    // UI camera (orthographic for 2D panel)
+    // Camera setup
     const aspect = container.clientWidth / container.clientHeight
+    this.camera = new THREE.PerspectiveCamera(40, aspect, 0.1, 1000)
+    this.camera.position.set(1, 3, 2.5)
+    this.camera.lookAt(0, 0, 0)
+    
+    // UI camera (orthographic for 2D panel)
     const uiHeight = 1
     const uiWidth = uiHeight * aspect
     this.uiCamera = new THREE.OrthographicCamera(
@@ -139,17 +159,151 @@ export class BudEngine extends EngineUtils {
     )
     this.uiCamera.position.z = 1
     
+    // Renderer setup
+    this.renderer = new THREE.WebGLRenderer({ 
+      antialias: true,
+      alpha: true,
+      depth: true // Enable depth buffer
+    })
+    this.renderer.setPixelRatio(window.devicePixelRatio)
+    this.renderer.setSize(container.clientWidth, container.clientHeight)
+    this.renderer.setClearColor('#111419', 1)
+    this.renderer.autoClear = true
+    this.renderer.sortObjects = true // Enable proper depth sorting
+    container.appendChild(this.renderer.domElement)
+    
     // Remove existing ground plane and add pot and dirt instead
     this.setupPotAndDirt()
     
-    // Initialize input manager
-    this.inputManager = new InputManager(this.controls)
+    // Enable shadows
+    this.renderer.shadowMap.enabled = true
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap
+
+    // Brighter ambient light
+    const ambientLight = new THREE.AmbientLight(0xffffff, 2.2)
+    this.scene.add(ambientLight)
+    
+    // Brighter directional light with better position
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 2.2)
+    directionalLight.position.set(2, 4, 2)
+    directionalLight.castShadow = true
+    directionalLight.shadow.mapSize.width = 2048
+    directionalLight.shadow.mapSize.height = 2048
+    directionalLight.shadow.camera.near = 0.1
+    directionalLight.shadow.camera.far = 20
+    directionalLight.shadow.camera.left = -5
+    directionalLight.shadow.camera.right = 5
+    directionalLight.shadow.camera.top = 5
+    directionalLight.shadow.camera.bottom = -5
+    directionalLight.shadow.bias = -0.001 // Reduce shadow artifacts
+    this.scene.add(directionalLight)
+
+    // Add fill light from opposite side
+    const fillLight = new THREE.DirectionalLight(0xffffff, 0.5)
+    fillLight.position.set(-2, 2, -2)
+    this.scene.add(fillLight)
+    
+    // Add grid helper with lighter colors
+    const gridHelper = new THREE.GridHelper(10, 10, '#888888', '#dddddd')
+    gridHelper.position.y = 0 // Ensure grid is at ground level
+    this.scene.add(gridHelper)
+    
+    // Add forward Z debug arrow
+    const forwardArrowMat = new THREE.LineBasicMaterial({
+      color: 0x0000ff,
+      depthTest: false,
+      transparent: true,
+      opacity: 0.8
+    })
+    const forwardArrow = new THREE.ArrowHelper(
+      new THREE.Vector3(0, 0, 1), // Direction is +Z
+      new THREE.Vector3(0, 0, 0), // Start at origin
+      .67, // Length of 5 units
+      0x0000ff, // Blue color
+      .1, // Head length
+      .1 // Head width
+    )
+    forwardArrow.line.material = forwardArrowMat
+    forwardArrow.cone.material = forwardArrowMat
+    forwardArrow.userData.isDebug = true
+    forwardArrow.renderOrder = 999
+    this.scene.add(forwardArrow)
+    
+    // Add invisible ground plane for better intersection
+    const groundGeo = new THREE.PlaneGeometry(10, 10)
+    const groundMat = new THREE.MeshBasicMaterial({ 
+      visible: false,
+      side: THREE.DoubleSide
+    })
+    this.groundPlane = new THREE.Mesh(groundGeo, groundMat)
+    this.groundPlane.rotation.x = -Math.PI / 2 // Rotate to be horizontal
+    this.groundPlane.position.y = 0
+    this.scene.add(this.groundPlane)
     
     // Event listeners
     this.renderer.domElement.addEventListener('mousedown', this.onMouseDown.bind(this))
     this.renderer.domElement.addEventListener('mousemove', this.onMouseMove.bind(this))
     this.renderer.domElement.addEventListener('mouseup', this.onMouseUp.bind(this))
+    window.addEventListener('resize', this.onResize.bind(this))
     
+    // Add orbit controls
+    this.controls = new OrbitControls(this.camera, this.renderer.domElement)
+    this.controls.enableDamping = true
+    this.controls.dampingFactor = 0.05
+    this.controls.screenSpacePanning = true
+    this.controls.minDistance = 1
+    this.controls.maxDistance = 10
+    this.controls.maxPolarAngle = Math.PI / 2 // Don't allow camera below ground
+    this.controls.target.set(0, 0.4, 0) // Look at planting area
+    this.controls.update()
+
+    this.controls.mouseButtons = {
+      LEFT: THREE.MOUSE.ROTATE,
+      MIDDLE: THREE.MOUSE.DOLLY,
+      RIGHT: THREE.MOUSE.PAN
+    }
+    
+    // Initialize input manager
+    this.inputManager = new InputManager(this.controls)
+    
+    // Setup post-processing
+    this.composer = new EffectComposer(this.renderer)
+    
+    // Render pass
+    const renderPass = new RenderPass(this.scene, this.camera)
+    this.composer.addPass(renderPass)
+    
+    // Very subtle bloom on everything
+    this.bloomPass = new UnrealBloomPass(
+      new THREE.Vector2(container.clientWidth, container.clientHeight),
+      0.15,    // strength - very subtle
+      1,    // radius
+      0     // threshold - low threshold so it affects everything
+    )
+    this.composer.addPass(this.bloomPass)
+    
+    // Setup outline pass with more visible settings
+    this.outlinePass = new OutlinePass(
+      new THREE.Vector2(container.clientWidth, container.clientHeight),
+      this.scene,
+      this.camera
+    )
+    this.outlinePass.visibleEdgeColor.set('#ffffff') // White outline
+    this.outlinePass.hiddenEdgeColor.set('#ffffff')
+    this.outlinePass.edgeStrength = 3 // Reverted from 10
+    this.outlinePass.edgeGlow = 0 // Reverted from 1
+    this.outlinePass.edgeThickness = 1 // Reverted from 4
+    this.outlinePass.pulsePeriod = 0
+    this.outlinePass.usePatternTexture = false
+    this.composer.addPass(this.outlinePass)
+
+    // Make sure we're using the composer instead of renderer directly
+    this.renderer.autoClear = false // Important for post-processing
+    this.renderer.setClearColor('#111419', 1)
+    
+    // Start render loop
+    this.animate()
+
     // Load saved plant state after everything is set up
     requestAnimationFrame(() => {
       this.loadFromLocalStorage()
@@ -157,7 +311,7 @@ export class BudEngine extends EngineUtils {
     })
   }
 
-  protected setupPotAndDirt() {
+  private setupPotAndDirt() {
     // Create main pot with lighter material
     const potGeo = new THREE.CylinderGeometry(0.6, 0.4, 0.4, 32)
     const potMat = new THREE.MeshStandardMaterial({ 
@@ -232,7 +386,7 @@ export class BudEngine extends EngineUtils {
     })
   }
 
-  protected createGeometry(type: PartType, params: { width: number, length: number }): THREE.BufferGeometry {
+  private createGeometry(type: PartType, params: { width: number, length: number }): THREE.BufferGeometry {
     switch (type) {
       case 'stem':
         const stemGeo = new THREE.CylinderGeometry(params.width, params.width, params.length, 8)
@@ -257,7 +411,7 @@ export class BudEngine extends EngineUtils {
     }
   }
 
-  protected createPartPreview(type: PartType, color: string): THREE.Mesh {
+  private createPartPreview(type: PartType, color: string): THREE.Mesh {
     const scale = 1
     const geometry = this.createGeometry(type, {
       width: type === 'stem' ? 0.03 * scale : 0.05 * scale,
@@ -285,7 +439,7 @@ export class BudEngine extends EngineUtils {
     return mesh
   }
 
-  protected onMouseDown(event: MouseEvent) {
+  private onMouseDown(event: MouseEvent) {
     this.mouseDown = true
     this.isDragging = false
 
@@ -417,7 +571,7 @@ export class BudEngine extends EngineUtils {
     this.notifyDeselect()
   }
 
-  protected onMouseMove(event: MouseEvent) {
+  private onMouseMove(event: MouseEvent) {
     this.mouse.x = (event.clientX / this.renderer.domElement.clientWidth) * 2 - 1
     this.mouse.y = -(event.clientY / this.renderer.domElement.clientHeight) * 2 + 1
     
@@ -474,7 +628,7 @@ export class BudEngine extends EngineUtils {
     }
   }
 
-  protected onMouseUp(event: MouseEvent) {
+  private onMouseUp(event: MouseEvent) {
     this.mouseDown = false
     // Re-enable camera rotation
     this.controls.enableRotate = true
@@ -506,7 +660,7 @@ export class BudEngine extends EngineUtils {
     }
   }
 
-  public onResize = () => {
+  private onResize = () => {
     const container = this.renderer.domElement.parentElement
     if (!container) return
 
@@ -537,7 +691,7 @@ export class BudEngine extends EngineUtils {
     this.outlinePass.resolution.set(width, height)
   }
 
-  protected animate = () => {
+  private animate = () => {
     requestAnimationFrame(this.animate)
     this.controls.update()
     
@@ -616,7 +770,7 @@ export class BudEngine extends EngineUtils {
     this.composer.render()
   }
 
-  protected cleanupMeshes(currentPartId: string) {
+  private cleanupMeshes(currentPartId: string) {
     const currentPart = this.parts.get(currentPartId)
     if (!currentPart) return
     
@@ -648,7 +802,7 @@ export class BudEngine extends EngineUtils {
     }
   }
 
-  protected renderBody(bodyId: string) {
+  private renderBody(bodyId: string) {
     const body = this.bodies.get(bodyId)
     if (!body) return
 
@@ -665,7 +819,7 @@ export class BudEngine extends EngineUtils {
     this.renderPartHierarchy(body.rootPartId, worldTransform)
   }
 
-  protected calculateBoneBasis(boneDir: THREE.Vector3): {
+  private calculateBoneBasis(boneDir: THREE.Vector3): {
     right: THREE.Vector3,
     forward: THREE.Vector3
   } {
@@ -688,7 +842,7 @@ export class BudEngine extends EngineUtils {
     return { right, forward }
   }
 
-  protected renderPartHierarchy(
+  private renderPartHierarchy(
     partId: string, 
     parentWorldTransform: THREE.Matrix4, 
     parentGroup?: THREE.Group,
@@ -1122,7 +1276,7 @@ export class BudEngine extends EngineUtils {
     }
   }
 
-  protected updatePartDrag(worldPosition: THREE.Vector3) {
+  private updatePartDrag(worldPosition: THREE.Vector3) {
     if (!this.activePartId) return
     const part = this.parts.get(this.activePartId)
     if (!part || part.boneIds.length === 0) return
@@ -1324,11 +1478,13 @@ export class BudEngine extends EngineUtils {
     }
   }
 
-  protected endBoneDrag() {
+  // End bone drag
+  endBoneDrag() {
     this.activePartId = undefined
   }
 
-  protected addBone(params: {
+  // Add a new bone
+  private addBone(params: {
     partId: string,
     position: THREE.Vector3,
     length?: number,
@@ -1384,7 +1540,7 @@ export class BudEngine extends EngineUtils {
     }
   }
 
-  protected notifySelect(data: { 
+  private notifySelect(data: { 
     id: string
     type: PartType
     position: [number, number, number]
@@ -1437,7 +1593,7 @@ export class BudEngine extends EngineUtils {
     }
   }
 
-  protected notifyDeselect() {
+  private notifyDeselect() {
     if (this.onDeselect) {
       this.onDeselect()
     }
@@ -1448,7 +1604,7 @@ export class BudEngine extends EngineUtils {
     return this._eventListeners
   }
 
-  protected getDefaultColor(type: PartType): string {
+  private getDefaultColor(type: PartType): string {
     switch (type) {
       case 'stem': return '#44aa44'
       case 'leaf': return '#66cc66'
@@ -1526,7 +1682,7 @@ export class BudEngine extends EngineUtils {
     this.saveToLocalStorage()
   }
 
-  protected addPart(params: {
+  private addPart(params: {
     worldPosition: THREE.Vector3,
     type: PartType,
     length?: number,
@@ -1590,7 +1746,7 @@ export class BudEngine extends EngineUtils {
     return id
   }
 
-  protected getBoneIdFromMesh(mesh: THREE.Object3D): string | undefined {
+  private getBoneIdFromMesh(mesh: THREE.Object3D): string | undefined {
     return mesh.userData.boneId
   }
 
@@ -1636,7 +1792,7 @@ export class BudEngine extends EngineUtils {
     return partId
   }
 
-  protected createBodyForPart(partId: string) {
+  private createBodyForPart(partId: string) {
     const part = this.parts.get(partId)
     if (!part) return
 
@@ -1653,7 +1809,7 @@ export class BudEngine extends EngineUtils {
     return body
   }
 
-  protected getPartWorldTransform(part: Part, bones: Map<string, Bone>, parts: Map<string, Part>): Transform {
+  private getPartWorldTransform(part: Part, bones: Map<string, Bone>, parts: Map<string, Part>): Transform {
     // Start with identity transform
     const worldTransform: Transform = {
       position: new THREE.Vector3(),
@@ -1700,6 +1856,395 @@ export class BudEngine extends EngineUtils {
     worldTransform.position.copy(attachPoint)
 
     return worldTransform
+  }
+
+  private getWorldTransformForBone(bone: Bone): THREE.Matrix4 {
+    const part = this.parts.get(bone.partId)
+    if (!part) return new THREE.Matrix4()
+
+    // Find the root part by walking up the chain
+    let rootPart = part
+    while (rootPart.parentBoneId) {
+      const parentBone = this.bones.get(rootPart.parentBoneId)
+      if (!parentBone) break
+      const nextPart = this.parts.get(parentBone.partId)
+      if (!nextPart) break
+      rootPart = nextPart
+    }
+
+    // Get the root part's body transform
+    const body = Array.from(this.bodies.values()).find(b => b.rootPartId === rootPart.id)
+    let rootTransform;
+    if (body) {
+      rootTransform = new THREE.Matrix4().makeBasis(
+        body.transform.right,
+        body.transform.up,
+        body.transform.forward
+      ).setPosition(body.transform.position)
+    } else {
+      rootTransform = new THREE.Matrix4()
+    }
+
+    // Now recursively calculate transforms from root to target
+    return this.calculateTransformFromRoot(rootPart, bone.id, rootTransform)
+  }
+
+  private calculateTransformFromRoot(part: Part, targetBoneId: string, parentTransform: THREE.Matrix4): THREE.Matrix4 {
+    // Start with parent transform
+    let currentTransform = parentTransform.clone()
+    
+    // Create a group for this part
+    const partGroup = new THREE.Group()
+    partGroup.userData.partId = part.id
+    
+    // Find the body this part belongs to
+    const body = Array.from(this.bodies.values()).find(b => b.rootPartId === part.id)
+    if (!body) return currentTransform
+    partGroup.userData.bodyId = body.id
+    
+    // Keep track of parent IDs
+    const currentParentIds = new Set<string>()
+    currentParentIds.add(part.id)
+    
+    // Get part attributes
+    const attributes = part.attributes
+    if (!attributes.color) {
+      attributes.color = this.getDefaultColor(part.type)
+    }
+    
+    // Process each bone in this part
+    for (const boneId of part.boneIds) {
+      const bone = this.bones.get(boneId)
+      if (!bone) continue
+
+      // First rotate current transform by bone's direction
+      const rotMatrix = new THREE.Matrix4()
+      const worldUpVec = new THREE.Vector3(0, 1, 0)
+      
+      // Create consistent basis vectors regardless of angle
+      const boneDir = bone.direction.clone().normalize()
+      
+      // Calculate basis vectors
+      const { right: boneRight, forward: boneForward } = this.calculateBoneBasis(boneDir)
+      
+      // First apply twist around local Y axis
+      const twistMatrix = new THREE.Matrix4().makeRotationY(bone.twist)
+      
+      // Then create and apply direction rotation matrix
+      rotMatrix.makeBasis(boneRight, boneDir, boneForward)
+      
+      // Combine transforms in correct order: twist first, then direction
+      const finalMatrix = rotMatrix.multiply(twistMatrix)
+
+      // Apply rotation to current transform
+      const worldTransform = currentTransform.clone().multiply(finalMatrix)
+
+      // Store transform for this bone
+      this.boneTransforms.set(boneId, worldTransform.clone())
+
+      // Create mesh for this bone at current position with new rotation
+      const geometry = this.createGeometry(part.type, {
+        width: bone.width,
+        length: bone.length
+      })
+
+      const material = new THREE.MeshStandardMaterial({ 
+        color: attributes.color,
+        roughness: 0.7,
+        metalness: 0.2,
+        side: part.type === 'leaf' || part.type === 'flower' ? THREE.DoubleSide : THREE.FrontSide
+      })
+
+      const mesh = new THREE.Mesh(geometry, material)
+      mesh.castShadow = true
+      mesh.receiveShadow = true
+      mesh.frustumCulled = false
+      mesh.userData.boneId = boneId
+      mesh.userData.bodyId = body.id
+      mesh.userData.partId = part.id
+      mesh.userData.parentPartIds = Array.from(currentParentIds)
+
+      // Add inner bone for stems
+      if (part.type === 'stem') {
+        // Create inner bone geometry - slightly smaller than outer bone
+        const innerGeo = new THREE.CylinderGeometry(
+          bone.width * 0.3, // Inner width
+          bone.width * 0.3,
+          bone.length * 0.9, // Inner length
+          8
+        )
+        innerGeo.translate(0, bone.length * 0.45, 0) // Center in bone
+
+        // Create material based on selection state
+        const isSelected = this.selectedBoneId === boneId
+        const innerMat = new THREE.MeshStandardMaterial({
+          color: isSelected ? '#ffffff' : '#bbbbbb',
+          roughness: 0.9,
+          metalness: 0.0,
+          depthTest: false,
+          transparent: true,
+          opacity: 0.7
+        })
+
+        const innerMesh = new THREE.Mesh(innerGeo, innerMat)
+        innerMesh.renderOrder = 1 // Ensure renders on top
+        
+        // Position using bone transform
+        innerMesh.position.setFromMatrixPosition(worldTransform)
+        
+        // Extract coordinate system from transform
+        const right = new THREE.Vector3()
+        const up = new THREE.Vector3()
+        const forward = new THREE.Vector3()
+        worldTransform.extractBasis(right, up, forward)
+        
+        // Orient mesh using full basis
+        innerMesh.matrix.makeBasis(right, up, forward)
+        innerMesh.matrix.setPosition(innerMesh.position)
+        innerMesh.matrixAutoUpdate = false
+
+        // Add to part group instead of mesh
+        partGroup.add(innerMesh)
+      }
+
+      // Add eyes if this is a head bone and it's a stem
+      if (bone.isHead && part.type === 'stem') {
+        const eyeGroup = new THREE.Group()
+        
+        // Create eyes with flat shading
+        const eyeGeo = new THREE.SphereGeometry(bone.width * 0.4, 12, 8)
+        const eyeMat = new THREE.MeshStandardMaterial({ 
+          color: '#ffffff',
+          roughness: 0.7,
+          metalness: 0.2,
+        })
+        const pupilGeo = new THREE.SphereGeometry(bone.width * 0.2, 8, 8)
+        const pupilMat = new THREE.MeshStandardMaterial({ 
+          color: '#000000',
+          roughness: 0.7,
+          metalness: 0.2,
+        })
+        
+        // Left eye with better positioning
+        const leftEye = new THREE.Mesh(eyeGeo, eyeMat)
+        leftEye.position.set(bone.width * 1.2, bone.length * 0.8, bone.width * 0.8)
+        const leftPupil = new THREE.Mesh(pupilGeo, pupilMat)
+        leftPupil.position.z = bone.width * 0.3
+        leftEye.add(leftPupil)
+        eyeGroup.add(leftEye)
+        
+        // Right eye with better positioning
+        const rightEye = new THREE.Mesh(eyeGeo, eyeMat)
+        rightEye.position.set(-bone.width * 1.2, bone.length * 0.8, bone.width * 0.8)
+        const rightPupil = new THREE.Mesh(pupilGeo, pupilMat)
+        rightPupil.position.z = bone.width * 0.3
+        rightEye.add(rightPupil)
+        eyeGroup.add(rightEye)
+        
+        mesh.add(eyeGroup)
+      }
+
+      // Position mesh using world transform
+      mesh.position.setFromMatrixPosition(worldTransform)
+      
+      // Extract coordinate system from transform
+      const right = new THREE.Vector3()
+      const up = new THREE.Vector3()
+      const forward = new THREE.Vector3()
+      worldTransform.extractBasis(right, up, forward)
+      
+      // Orient mesh using full basis instead of just up vector
+      mesh.matrix.makeBasis(right, up, forward)
+      mesh.matrix.setPosition(mesh.position)
+      mesh.matrixAutoUpdate = false
+
+      // Add to part group
+      partGroup.add(mesh)
+
+      // Add debug visualization if debug mode is on
+      if (this.debugMode) {
+        const boneStart = new THREE.Vector3().setFromMatrixPosition(worldTransform)
+        const arrowMat = new THREE.LineBasicMaterial({
+          color: 0xffff00,
+          depthTest: false,
+          transparent: true,
+          opacity: 0.8
+        })
+        const arrowHelper = new THREE.ArrowHelper(
+          up,
+          boneStart,
+          bone.length,
+        )
+        arrowHelper.line.material = arrowMat
+        arrowHelper.cone.material = arrowMat
+        arrowHelper.userData.isDebug = true
+        arrowHelper.renderOrder = 999
+        partGroup.add(arrowHelper)
+      }
+
+      // Process child parts
+      for (const [childPartId, attachment] of bone.children.entries()) {
+        // Get bone's world transform matrix
+        const boneTransform = worldTransform.clone()
+        
+        // Get bone start position and direction in world space
+        const boneStart = new THREE.Vector3().setFromMatrixPosition(boneTransform)
+        
+        // Calculate attachment point along bone
+        const attachPoint = boneStart.clone().add(
+          up.clone().multiplyScalar(bone.length * attachment.ratio)
+        )
+
+        // Create attachment transform matrix
+        const attachmentTransform = new THREE.Matrix4()
+        
+        // Get parent bone's up direction (bone axis)
+        const boneAxis = up.clone().normalize()
+        
+        let childUp: THREE.Vector3
+        let childForward: THREE.Vector3
+        
+        if (attachment.ratio === 0 || attachment.ratio === 1) {
+          // For end attachments, use parent bone direction as up
+          childUp = boneAxis.clone()
+          
+          // Use parent's forward as child's forward to maintain same rotation
+          childForward = forward.clone()
+          
+          // If at start of bone, flip both vectors
+          if (attachment.ratio === 0) {
+            childUp.negate()
+            childForward.negate()
+          }
+        } else {
+          // For side attachments, create perpendicular orientation
+          // First find a perpendicular direction based on attachment angle
+          const perpDir = new THREE.Vector3(
+            Math.cos(attachment.angle),
+            0,
+            Math.sin(attachment.angle)
+          ).normalize()
+          
+          // Transform perpendicular direction by parent's rotation
+          perpDir.applyMatrix4(boneTransform)
+          perpDir.sub(boneStart).normalize()
+          
+          // Add offset from bone surface
+          attachPoint.add(perpDir.clone().multiplyScalar(bone.width * 0.9))
+          
+          // Use perpDir as up and boneAxis as forward
+          childUp = perpDir
+          childForward = boneAxis.clone()
+        }
+        
+        // Calculate right vector from forward and up
+        const childRight = new THREE.Vector3().crossVectors(childForward, childUp).normalize()
+        // Recalculate up to ensure orthogonality
+        childUp.crossVectors(childRight, childForward).normalize()
+        
+        // Create final transform
+        attachmentTransform.makeBasis(
+          childRight,
+          childUp,
+          childForward
+        )
+        attachmentTransform.setPosition(attachPoint)
+        
+        // Recursively render child part
+        this.renderPartHierarchy(childPartId, attachmentTransform, partGroup, currentParentIds, attributes)
+
+        // Add debug visualization if debug mode is on
+        if (this.debugMode) {
+          // Debug vectors with custom materials
+          const arrowMat1 = new THREE.LineBasicMaterial({
+            color: 0xff0000,
+            depthTest: false,
+            transparent: true,
+            opacity: 0.8
+          })
+          const arrowMat2 = new THREE.LineBasicMaterial({
+            color: 0x00ff00,
+            depthTest: false,
+            transparent: true,
+            opacity: 0.8
+          })
+          const arrowMat3 = new THREE.LineBasicMaterial({
+            color: 0x0000ff,
+            depthTest: false,
+            transparent: true,
+            opacity: 0.8
+          })
+
+          // Visualize attachment coordinate system
+          const attachHelper1 = new THREE.ArrowHelper(
+            childRight,
+            attachPoint,
+            bone.width * 2,
+            0xff0000
+          )
+          attachHelper1.line.material = arrowMat1
+          attachHelper1.cone.material = arrowMat1
+          attachHelper1.userData.isDebug = true
+          attachHelper1.renderOrder = 999
+          partGroup.add(attachHelper1)
+
+          const attachHelper2 = new THREE.ArrowHelper(
+            childUp,
+            attachPoint,
+            bone.width * 2,
+            0x00ff00
+          )
+          attachHelper2.line.material = arrowMat2
+          attachHelper2.cone.material = arrowMat2
+          attachHelper2.userData.isDebug = true
+          attachHelper2.renderOrder = 999
+          partGroup.add(attachHelper2)
+
+          const attachHelper3 = new THREE.ArrowHelper(
+            childForward,
+            attachPoint,
+            bone.width * 2,
+            0x0000ff
+          )
+          attachHelper3.line.material = arrowMat3
+          attachHelper3.cone.material = arrowMat3
+          attachHelper3.userData.isDebug = true
+          attachHelper3.renderOrder = 999
+          partGroup.add(attachHelper3)
+
+          // Add negative arrows
+          const attachHelper1Neg = new THREE.ArrowHelper(
+            childRight.clone().negate(),
+            attachPoint,
+            bone.width * 2,
+            0xff0000
+          )
+          attachHelper1Neg.line.material = arrowMat1
+          attachHelper1Neg.cone.material = arrowMat1
+          attachHelper1Neg.userData.isDebug = true
+          attachHelper1Neg.renderOrder = 999
+          partGroup.add(attachHelper1Neg)
+
+          const attachHelper3Neg = new THREE.ArrowHelper(
+            childForward.clone().negate(),
+            attachPoint,
+            bone.width * 2,
+            0x0000ff
+          )
+          attachHelper3Neg.line.material = arrowMat3
+          attachHelper3Neg.cone.material = arrowMat3
+          attachHelper3Neg.userData.isDebug = true
+          attachHelper3Neg.renderOrder = 999
+          partGroup.add(attachHelper3Neg)
+        }
+      }
+
+      // After rendering bone and children, translate current transform forward by bone length
+      const translation = new THREE.Matrix4().makeTranslation(0, bone.length, 0)
+      currentTransform.multiply(rotMatrix).multiply(translation)
+    }
+
+    return currentTransform
   }
 
   // Add bone to start of stem part
@@ -1788,19 +2333,20 @@ export class BudEngine extends EngineUtils {
     return wasAdded
   }
 
-  protected findPartGroup(partId: string): THREE.Group | undefined {
-    let foundGroup: THREE.Group | undefined = undefined
+  // Add this helper method to find part groups anywhere in the scene
+  private findPartGroup(partId: string): THREE.Group | null {
+    let foundGroup: THREE.Group | null = null
     
     // First try root level for performance
     foundGroup = this.scene.children.find(child => 
       child instanceof THREE.Group && child.userData.partId === partId
-    ) as THREE.Group | undefined
+    ) as THREE.Group | null
     
     // If not found at root, search entire scene hierarchy
     if (!foundGroup) {
       this.scene.traverse(child => {
         if (child instanceof THREE.Group && child.userData.partId === partId) {
-          foundGroup = child as THREE.Group
+          foundGroup = child
         }
       })
     }
@@ -1808,7 +2354,8 @@ export class BudEngine extends EngineUtils {
     return foundGroup
   }
 
-  protected saveToLocalStorage() {
+  // Save current plant state to localStorage
+  private saveToLocalStorage() {
     try {
       const serializedPlant = this.serializePlant()
       localStorage.setItem('bud_plant', serializedPlant)
@@ -1818,7 +2365,8 @@ export class BudEngine extends EngineUtils {
     }
   }
 
-  protected loadFromLocalStorage() {
+  // Load plant state from localStorage
+  private loadFromLocalStorage() {
     try {
       const savedPlant = localStorage.getItem('bud_plant')
       if (savedPlant) {
@@ -1830,7 +2378,8 @@ export class BudEngine extends EngineUtils {
     }
   }
 
-  protected serializePlant(): string {
+  // Serialize just the root parts and their hierarchies
+  serializePlant(): string {
     const rootData = Array.from(this.roots).map(rootId => {
       const body = Array.from(this.bodies.values()).find(b => b.rootPartId === rootId)
       return {
@@ -1846,7 +2395,7 @@ export class BudEngine extends EngineUtils {
     return JSON.stringify(rootData)
   }
 
-  protected serializePart(partId: string): any {
+  private serializePart(partId: string): any {
     const part = this.parts.get(partId)
     if (!part) return null
 
@@ -1917,7 +2466,7 @@ export class BudEngine extends EngineUtils {
     this.composer.render()
   }
 
-  protected loadPartData(partData: any, parentBoneId?: string): string | null {
+  private loadPartData(partData: any, parentBoneId?: string): string | null {
     const partId = Math.random().toString(36).substr(2, 9)
     const part: Part = {
       id: partId,
@@ -2261,7 +2810,7 @@ export class BudEngine extends EngineUtils {
     this.notifyDeselect()
   }
 
-  protected clonePartHierarchy(sourceBoneId: string, newParentBoneId?: string): string | null {
+  private clonePartHierarchy(sourceBoneId: string, newParentBoneId?: string): string | null {
     // Get source part info
     const sourcePartId = this.bonePartIds.get(sourceBoneId)
     if (!sourcePartId) return null
@@ -2498,24 +3047,5 @@ export class BudEngine extends EngineUtils {
     }
 
     this.saveToLocalStorage()
-  }
-
-  // Add public method to set plant data
-  setPlantData(data: PlantData) {
-    this.parts = new Map(data.parts)
-    this.bones = new Map(data.bones)
-    this.bodies = new Map(data.bodies)
-    this.roots = new Set(data.roots)
-    this.renderPlant(data)
-  }
-
-  // Add public method to get plant data
-  getPlantData(): PlantData {
-    return {
-      parts: this.parts,
-      bones: this.bones,
-      bodies: this.bodies,
-      roots: this.roots
-    }
   }
 }

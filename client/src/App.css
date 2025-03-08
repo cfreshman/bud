@@ -43,11 +43,19 @@
 }
 
 .app {
-  width: 100%;
-  height: 100%;
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background-color: #111419;
+  color: #ffffff;
+  font-family: monospace;
+}
+
+.main-view {
+  flex: 1;
   position: relative;
   overflow: hidden;
-  pointer-events: none;
 }
 
 .canvas-container {
@@ -207,5 +215,90 @@
 
 .edit-row button.fit-view:hover {
   background: #dddddd;
+  color: #111419;
+}
+
+.back-button {
+  position: fixed;
+  top: 1rem;
+  left: 1rem;
+  background: #111419;
+  border: 1px solid #888888;
+  color: #dddddd;
+  padding: 0.4rem 0.75rem;
+  border-radius: 3px;
+  font-family: monospace;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  z-index: 1000;
+}
+
+.back-button:hover {
+  background: #222222;
+  border-color: #dddddd;
+}
+
+.back-button:active {
+  background: #333333;
+}
+
+.editor-controls {
+  position: fixed;
+  top: 1rem;
+  left: 1rem;
+  display: flex;
+  gap: 0.75rem;
+  z-index: 1000;
+}
+
+.control-button {
+  background: #111419;
+  border: 1px solid #888888;
+  color: #dddddd;
+  padding: 0.4rem 0.75rem;
+  border-radius: 3px;
+  font-family: monospace;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.control-button:hover {
+  background: #222222;
+  border-color: #dddddd;
+}
+
+.control-button:active {
+  background: #333333;
+}
+
+.control-button.cancel {
+  border-color: #888888;
+  color: #888888;
+}
+
+.control-button.cancel:hover {
+  background: #888888;
+  color: #111419;
+}
+
+.control-button.delete {
+  border-color: #ff4444;
+  color: #ff4444;
+}
+
+.control-button.delete:hover {
+  background: #ff4444;
+  color: #111419;
+}
+
+.control-button.save {
+  border-color: #44ff44;
+  color: #44ff44;
+}
+
+.control-button.save:hover {
+  background: #44ff44;
   color: #111419;
 }

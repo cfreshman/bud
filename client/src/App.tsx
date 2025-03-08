@@ -1,113 +1,58 @@
-import { useEffect, useRef, useState } from 'react'
-import { BudEngine } from './engine/BudEngine'
-import { EditPanel } from './components/EditPanel'
-import { Status } from './components/Status'
-import { EditableProperties } from './types'
+import { useState } from 'react'
+import { Greenhouse } from './components/Greenhouse'
+import { Editor } from './components/Editor'
+import { PlantData } from './engine/types'
 import './App.css'
 
-declare global {
-  interface Window {
-    budEngine?: BudEngine
-  }
-}
-
 function App() {
-  const containerRef = useRef<HTMLDivElement>(null)
-  const engineRef = useRef<BudEngine | null>(null)
-  const [selected, setSelected] = useState<EditableProperties | null>(null)
+  const [selectedPlot, setSelectedPlot] = useState<number | null>(null)
+  const [plants, setPlants] = useState<Map<number, PlantData>>(new Map())
+  const [isEditing, setIsEditing] = useState(false)
 
-  useEffect(() => {
-    if (!containerRef.current) return
-    
-    // Only create engine if it doesn't exist
-    if (!engineRef.current) {
-      engineRef.current = new BudEngine(containerRef.current, {
-        onSelect: (data) => {
-          if (!data.length || !data.width) return
-          setSelected({
-            id: data.id,
-            type: data.type,
-            position: data.position,
-            color: data.color || '',
-            length: data.length,
-            width: data.width,
-            theta: data.theta || 0,
-            phi: data.phi || 0,
-            twist: data.twist || 0
-          })
-        },
-        onDeselect: () => setSelected(null)
-      })
-      window.budEngine = engineRef.current
+  const handleSelectPlot = (plotIndex: number, plantData?: PlantData) => {
+    setSelectedPlot(plotIndex)
+    setIsEditing(true)
+  }
+
+  const handleSavePlant = (plantData: PlantData) => {
+    if (selectedPlot !== null) {
+      const newPlants = new Map(plants)
+      newPlants.set(selectedPlot, plantData)
+      setPlants(newPlants)
+      setIsEditing(false)
     }
-
-    // No cleanup needed - we want to keep the engine instance
-  }, [])
-
-  const handleUpdateProperties = (id: string, updates: Partial<EditableProperties>) => {
-    if (!engineRef.current) return
-    engineRef.current.updateProperties(id, updates)
-    
-    // Update selected state with new properties
-    setSelected(prev => {
-      if (!prev || prev.id !== id) return prev
-      return {
-        ...prev,
-        ...updates,
-        // Handle special case for clearing color
-        color: updates.color === 'none' ? '' : (updates.color || prev.color)
-      }
-    })
   }
 
-  const handleGrowStem = (id: string) => {
-    if (!engineRef.current) return
-    console.log('App: Growing stem', { id })
-    engineRef.current.growStemPart(id)
+  const handleCancelEdit = () => {
+    setIsEditing(false)
   }
 
-  const handleShrinkStem = (id: string) => {
-    if (!engineRef.current) return
-    console.log('App: Shrinking stem', { id })
-    engineRef.current.shrinkStemPart(id)
-  }
-
-  const handleDelete = (id: string) => {
-    if (!engineRef.current) return
-    console.log('App: Deleting part', { id })
-    engineRef.current.deletePart(id)
-  }
-
-  const handleClone = (id: string) => {
-    if (!engineRef.current) return
-    console.log('App: Cloning part', { id })
-    engineRef.current.clonePart(id)
-  }
-
-  const handleFitView = () => {
-    if (!engineRef.current) return
-    engineRef.current.fitCameraToPlant()
-  }
-
-  const handleApplyToAll = (id: string) => {
-    if (!engineRef.current) return
-    engineRef.current.applyPropertiesToAllOfType(id)
+  const handleDeletePlant = () => {
+    if (selectedPlot !== null) {
+      const newPlants = new Map(plants)
+      newPlants.delete(selectedPlot)
+      setPlants(newPlants)
+      setIsEditing(false)
+    }
   }
 
   return (
     <div className="app">
-      <div ref={containerRef} className="canvas-container" />
-      <EditPanel 
-        selected={selected}
-        onUpdateProperties={handleUpdateProperties}
-        onGrowStem={handleGrowStem}
-        onShrinkStem={handleShrinkStem}
-        onDelete={handleDelete}
-        onClone={handleClone}
-        onFitView={handleFitView}
-        onApplyToAll={handleApplyToAll}
-      />
-      <Status />
+      <div className="main-view">
+        {isEditing ? (
+          <Editor 
+            plantData={selectedPlot !== null ? plants.get(selectedPlot) : undefined}
+            onSave={handleSavePlant}
+            onCancel={handleCancelEdit}
+            onDelete={handleDeletePlant}
+          />
+        ) : (
+          <Greenhouse 
+            plants={plants}
+            onSelectPlot={handleSelectPlot}
+          />
+        )}
+      </div>
     </div>
   )
 }
