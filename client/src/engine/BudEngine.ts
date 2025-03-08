@@ -371,7 +371,8 @@ export class BudEngine {
         return stemGeo
       case 'leaf':
         const radius = params.length * 2 / 7
-        const leafGeo = new THREE.CircleGeometry(radius, 16)
+        const leafGeo = new THREE.CylinderGeometry(radius, radius, 0.01, 16, 1, false)
+        leafGeo.rotateX(Math.PI / 2) // Rotate to be vertical
         leafGeo.scale(1, 2, 1) // Scale Y to make it oval
         leafGeo.translate(0, radius * 2, 0) // Adjust translation for new height
         return leafGeo
