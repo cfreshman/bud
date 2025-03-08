@@ -1683,7 +1683,8 @@ export class BudEngine {
       id,
       type: params.type,
       attributes: {
-        color: undefined,
+        // Only set default color for leaf, thorn, and flower
+        ...(params.type !== 'stem' && { color: this.getDefaultColor(params.type) }),
       },
       boneIds: []
     }

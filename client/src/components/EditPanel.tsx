@@ -33,9 +33,17 @@ export function EditPanel({
           }}
         />
         <button 
+          onClick={() => onUpdateProperties(selected.id, { color: selected.type === 'stem' ? '#44aa44' : 
+            selected.type === 'leaf' ? '#66cc66' : 
+            selected.type === 'thorn' ? '#aa4444' : 
+            '#ffdd88' })}
+        >
+          default
+        </button>
+        <button 
           onClick={() => onUpdateProperties(selected.id, { color: 'none' })}
         >
-          clear
+          inherit
         </button>
       </div>
 
