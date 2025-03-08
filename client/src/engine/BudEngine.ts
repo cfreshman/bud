@@ -1021,44 +1021,70 @@ export class BudEngine {
         const attachPoint = boneStart.clone().add(
           up.clone().multiplyScalar(bone.length * attachment.ratio)
         )
-        
-        // Create unit vector in XZ plane based on angle
-        const localOffset = new THREE.Vector3(
-          Math.cos(attachment.angle),
-          0,
-          Math.sin(attachment.angle)
-        ).normalize()
-        
-        // Create a matrix for just the rotation part of the bone transform
-        const rotationMatrix = boneTransform.clone()
-        rotationMatrix.setPosition(new THREE.Vector3(0, 0, 0))
-        
-        // Transform the local offset by just the rotation to get world space direction
-        const perpOffset = localOffset.clone()
-          .applyMatrix4(rotationMatrix)
-          .normalize()
-          .multiplyScalar(bone.width * .9)
-        
-        // Add offset to attachment point
-        attachPoint.add(perpOffset)
-        
+
         // Create attachment transform matrix
         const attachmentTransform = new THREE.Matrix4()
         
         // Get parent bone's up direction
         const parentUp = up.clone().normalize()
-        
-        // Create child's coordinate system:
-        // 1. childUp is the perpOffset direction (perpendicular to parent)
-        const childUp = perpOffset.clone().normalize()
-        
-        // 2. childForward is perpendicular to both childUp and parentUp
-        const childForward = parentUp // new THREE.Vector3().crossVectors(childUp, parentUp).normalize()
-        
-        // 3. childRight completes the right-handed system
-        const childRight = new THREE.Vector3().crossVectors(childForward, childUp).normalize()
-        
-        // Create attachment transform matrix with position and orientation
+
+        let childUp: THREE.Vector3
+        let childRight: THREE.Vector3
+        let childForward: THREE.Vector3
+
+        // Handle end attachments (ratio 0 or 1) differently from side attachments
+        if (attachment.ratio === 0 || attachment.ratio === 1) {
+          // For end attachments, align with bone direction
+          childUp = parentUp.clone()
+          childRight = right.clone()
+          childForward = forward.clone()
+
+          // If attaching to start (ratio 0), rotate 180° around right axis to point outward
+          if (attachment.ratio === 0) {
+            const rotMatrix = new THREE.Matrix4().makeRotationAxis(childRight, Math.PI)
+            childUp.applyMatrix4(rotMatrix)
+            childForward.applyMatrix4(rotMatrix)
+          }
+          // ratio 1 means align with parent's direction (no rotation needed)
+
+          // Apply twist around up axis
+          const twistMatrix = new THREE.Matrix4().makeRotationAxis(childUp, attachment.angle)
+          childRight.applyMatrix4(twistMatrix)
+          childForward.applyMatrix4(twistMatrix)
+        } else {
+          // Original side attachment logic
+          // Create unit vector in XZ plane based on angle
+          const localOffset = new THREE.Vector3(
+            Math.cos(attachment.angle),
+            0,
+            Math.sin(attachment.angle)
+          ).normalize()
+          
+          // Create a matrix for just the rotation part of the bone transform
+          const rotationMatrix = boneTransform.clone()
+          rotationMatrix.setPosition(new THREE.Vector3(0, 0, 0))
+          
+          // Transform the local offset by just the rotation to get world space direction
+          const perpOffset = localOffset.clone()
+            .applyMatrix4(rotationMatrix)
+            .normalize()
+            .multiplyScalar(bone.width * .9)
+          
+          // Add offset to attachment point
+          attachPoint.add(perpOffset)
+          
+          // Create child's coordinate system:
+          // 1. childUp is the perpOffset direction (perpendicular to parent)
+          childUp = perpOffset.clone().normalize()
+          
+          // 2. childForward is the parent's up direction
+          childForward = parentUp
+          
+          // 3. childRight completes the right-handed system
+          childRight = new THREE.Vector3().crossVectors(childForward, childUp).normalize()
+        }
+
+        // Create attachment transform with position and orientation
         attachmentTransform.makeBasis(
           childRight,
           childUp,
