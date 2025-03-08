@@ -1,3 +1,4 @@
+import './EditPanel.css'
 import { EditableProperties } from '../types'
 
 type EditPanelProps = {
@@ -24,7 +25,6 @@ export function EditPanel({ selected, onUpdateProperties, onGrowStem, onShrinkSt
         />
         <button 
           onClick={() => onUpdateProperties(selected.id, { color: 'none' })}
-          style={{ marginLeft: '8px' }}
         >
           clear
         </button>
@@ -138,8 +138,8 @@ export function EditPanel({ selected, onUpdateProperties, onGrowStem, onShrinkSt
 
       <div className="edit-row">
         <button 
+          className="delete"
           onClick={() => onDelete?.(selected.id)}
-          style={{ backgroundColor: '#ff4444', color: 'white' }}
         >
           delete
         </button>
