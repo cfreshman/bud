@@ -1934,6 +1934,9 @@ export class BudEngine {
         length: firstBone.length,
         width: firstBone.width
       })
+
+      // Fit camera to updated plant
+      this.fitCameraToPlant()
     } else {
       console.log('BudEngine: No body found for part', { rootPartId: currentPart.id })
     }
@@ -2538,6 +2541,49 @@ export class BudEngine {
           })
         }
       }
+
+      // Fit camera to include the cloned part
+      this.fitCameraToPlant()
     }
+  }
+
+  private fitCameraToPlant() {
+    // Create a bounding box to encompass all plant parts
+    const bbox = new THREE.Box3()
+    
+    // Add main pot to bounding box as minimum size reference
+    if (this.mainPot) {
+      bbox.expandByObject(this.mainPot)
+    }
+
+    // Add all plant parts to bounding box
+    this.scene.traverse(child => {
+      if (!(child instanceof THREE.Mesh)) return
+      if (!child.userData.boneId) return
+      bbox.expandByObject(child)
+    })
+
+    // Get bounding box center and size
+    const center = new THREE.Vector3()
+    const size = new THREE.Vector3()
+    bbox.getCenter(center)
+    bbox.getSize(size)
+
+    // Calculate camera distance based on bounding box size
+    const maxDim = Math.max(size.x, size.y, size.z)
+    const distance = maxDim * 2.5 // Adjust multiplier for tighter/looser fit
+
+    // Update camera position while maintaining current angles
+    const currentPos = new THREE.Vector3()
+    this.camera.getWorldPosition(currentPos)
+    const direction = currentPos.clone().sub(center).normalize()
+    const newPosition = center.clone().add(direction.multiplyScalar(distance))
+    
+    // Smoothly move camera to new position
+    this.camera.position.copy(newPosition)
+    
+    // Update controls target to box center
+    this.controls.target.copy(center)
+    this.controls.update()
   }
 }
