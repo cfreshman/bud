@@ -3,6 +3,7 @@ import { BudEngine } from '../engine/BudEngine'
 import { PlantData, PartType } from '../engine/types'
 import { EditPanel } from './EditPanel'
 import { EditableProperties } from '../types'
+import { serializePlantData, deserializePlantData } from '../utils/plantSaveUtils'
 
 interface EditorProps {
   plantData?: PlantData
@@ -51,13 +52,33 @@ export function Editor({ plantData, onSave, onCancel, onDelete }: EditorProps) {
     }
   }, [])
 
-  // Update plant data when it changes
+  // Auto-save engine state whenever it changes
   useEffect(() => {
-    if (!engineRef.current) return
-    if (plantData) {
-      engineRef.current.setPlantData(plantData)
+    const saveEngineState = () => {
+      if (engineRef.current) {
+        const currentState = engineRef.current.getPlantData()
+        localStorage.setItem('editor_plant_state', serializePlantData(currentState))
+      }
     }
-  }, [plantData])
+
+    // Save every second if engine exists
+    const interval = setInterval(saveEngineState, 1000)
+
+    return () => clearInterval(interval)
+  }, [])
+
+  // Load saved engine state on mount
+  useEffect(() => {
+    const savedState = localStorage.getItem('editor_plant_state')
+    if (savedState && engineRef.current) {
+      try {
+        const state = deserializePlantData(savedState)
+        engineRef.current.setPlantData(state)
+      } catch (error) {
+        console.error('Failed to load editor state:', error)
+      }
+    }
+  }, [])
 
   // Handle property updates
   const handlePropertyChange = (id: string, updates: Partial<EditableProperties>) => {
@@ -119,6 +140,19 @@ export function Editor({ plantData, onSave, onCancel, onDelete }: EditorProps) {
     if (!engineRef.current) return
     const plantData = engineRef.current.getPlantData()
     onSave(plantData)
+    localStorage.removeItem('editor_plant_state')
+  }
+
+  // Handle cancel
+  const handleCancel = () => {
+    localStorage.removeItem('editor_plant_state')
+    onCancel()
+  }
+
+  // Handle delete
+  const handleEditorDelete = () => {
+    localStorage.removeItem('editor_plant_state')
+    onDelete()
   }
 
   return (
@@ -134,10 +168,10 @@ export function Editor({ plantData, onSave, onCancel, onDelete }: EditorProps) {
       />
       
       <div className="editor-controls">
-        <button className="control-button cancel" onClick={onCancel}>
+        <button className="control-button cancel" onClick={handleCancel}>
           cancel
         </button>
-        <button className="control-button delete" onClick={onDelete}>
+        <button className="control-button delete" onClick={handleEditorDelete}>
           delete
         </button>
         <button className="control-button save" onClick={handleSave}>

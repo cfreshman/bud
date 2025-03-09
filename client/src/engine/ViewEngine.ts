@@ -176,7 +176,10 @@ export class ViewEngine extends EngineUtils {
       const plot = this.plots[plotIndex]
       if (!plot) return
 
-      // Clone the plant data
+      // Store the original data without plot offset
+      this.activePlots.set(plotIndex, plantData)
+
+      // Clone the plant data and add plot offset for rendering
       const clonedData: PlantData = {
         parts: new Map(plantData.parts),
         bones: new Map(plantData.bones),
@@ -198,10 +201,7 @@ export class ViewEngine extends EngineUtils {
         })
       }
       
-      // Store in active plots
-      this.activePlots.set(plotIndex, clonedData)
-      
-      // Use parent's renderPlant with the cloned data
+      // Render with offset positions
       this.renderPlant(clonedData)
     } else {
       // Clear from active plots
@@ -210,6 +210,7 @@ export class ViewEngine extends EngineUtils {
   }
   
   getPlantFromPlot(plotIndex: number): PlantData | undefined {
+    // Return the original data without plot offset
     return this.activePlots.get(plotIndex)
   }
   
@@ -228,5 +229,59 @@ export class ViewEngine extends EngineUtils {
     
     // Call parent dispose
     super.dispose()
+  }
+
+  override animate = () => {
+    requestAnimationFrame(this.animate)
+    this.controls.update()
+
+    // Clear all groups at start of frame
+    const groupsToRemove = this.scene.children.filter(child => 
+      child instanceof THREE.Group && child.userData.bodyId !== undefined
+    )
+    
+    groupsToRemove.forEach(group => {
+      this.scene.remove(group)
+      group.traverse(child => {
+        if (child instanceof THREE.Mesh) {
+          child.geometry.dispose()
+          if (child.material instanceof THREE.Material) {
+            child.material.dispose()
+          }
+        }
+      })
+    })
+
+    // Re-render all active plants with their plot offsets
+    for (const [plotIndex, plantData] of this.activePlots.entries()) {
+      const plot = this.plots[plotIndex]
+      if (!plot) continue
+
+      // Create offset version for rendering
+      const offsetData: PlantData = {
+        parts: new Map(plantData.parts),
+        bones: new Map(plantData.bones),
+        bodies: new Map(),
+        roots: new Set(plantData.roots)
+      }
+
+      // Add plot offset to each body
+      for (const [id, body] of plantData.bodies) {
+        offsetData.bodies.set(id, {
+          id: body.id,
+          rootPartId: body.rootPartId,
+          transform: {
+            position: body.transform.position.clone().add(plot.position),
+            up: body.transform.up.clone(),
+            right: body.transform.right.clone(),
+            forward: body.transform.forward.clone()
+          }
+        })
+      }
+
+      this.renderPlant(offsetData)
+    }
+
+    this.composer.render()
   }
 } 

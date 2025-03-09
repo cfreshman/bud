@@ -150,9 +150,8 @@ export class BudEngine extends EngineUtils {
     this.renderer.domElement.addEventListener('mousemove', this.onMouseMove.bind(this))
     this.renderer.domElement.addEventListener('mouseup', this.onMouseUp.bind(this))
     
-    // Load saved plant state after everything is set up
+    // Start render loop
     requestAnimationFrame(() => {
-      this.loadFromLocalStorage()
       this.fitCameraToPlant() // Add camera fit after loading saved state
     })
   }
@@ -1281,7 +1280,6 @@ export class BudEngine extends EngineUtils {
             this.outlinePass.selectedObjects = [newPartGroup]
             this.composer.render()
           }
-          this.saveToLocalStorage() // Save after attaching to another part
         }
       }
     } else {
@@ -1319,7 +1317,6 @@ export class BudEngine extends EngineUtils {
         
         // Render the updated body
         this.renderBody(activeBody.id)
-        this.saveToLocalStorage() // Save after position change
       }
     }
   }
@@ -1522,8 +1519,6 @@ export class BudEngine extends EngineUtils {
     if (body) {
       this.renderBody(body.id)
     }
-
-    this.saveToLocalStorage()
   }
 
   protected addPart(params: {
@@ -1761,7 +1756,6 @@ export class BudEngine extends EngineUtils {
     if (body) {
       console.log('BudEngine: Rendering updated body', { bodyId: body.id })
       this.renderBody(body.id)
-      this.saveToLocalStorage() // Save after growing
 
       // Re-select the new first bone
       this.notifySelect({
@@ -1806,16 +1800,6 @@ export class BudEngine extends EngineUtils {
     }
     
     return foundGroup
-  }
-
-  protected saveToLocalStorage() {
-    try {
-      const serializedPlant = this.serializePlant()
-      localStorage.setItem('bud_plant', serializedPlant)
-      // console.log('Plant saved to localStorage')
-    } catch (error) {
-      console.error('Failed to save plant:', error)
-    }
   }
 
   protected loadFromLocalStorage() {
@@ -1928,7 +1912,7 @@ export class BudEngine extends EngineUtils {
     }
 
     // Create bones
-    partData.bones.forEach((boneData: any, index: number) => {
+    partData.bones.forEach((boneData: any) => {
       const boneId = this.addBone({
         partId,
         position: new THREE.Vector3(), // Will be set by transform
@@ -1936,7 +1920,6 @@ export class BudEngine extends EngineUtils {
         width: boneData.width,
         isHead: boneData.isHead
       })
-      part.boneIds.push(boneId)
 
       // Process children
       const bone = this.bones.get(boneId)
@@ -2037,7 +2020,6 @@ export class BudEngine extends EngineUtils {
     if (body) {
       console.log('BudEngine: Rendering updated body', { bodyId: body.id })
       this.renderBody(body.id)
-      this.saveToLocalStorage() // Save after shrinking
 
       // Re-select the new first bone
       const newFirstBone = this.bones.get(part.boneIds[0])
@@ -2158,7 +2140,6 @@ export class BudEngine extends EngineUtils {
       .find(b => b.rootPartId === rootPart.id)
     if (body) {
       this.renderBody(body.id)
-      this.saveToLocalStorage()
     }
   }
 
@@ -2257,7 +2238,6 @@ export class BudEngine extends EngineUtils {
       }
     }
 
-    this.saveToLocalStorage()
     this.notifyDeselect()
   }
 
@@ -2364,7 +2344,6 @@ export class BudEngine extends EngineUtils {
       body.transform.position.copy(newPosition)
       
       this.renderBody(body.id)
-      this.saveToLocalStorage()
 
       // Select the first bone of the new part
       const newPart = this.parts.get(newPartId)
@@ -2496,8 +2475,6 @@ export class BudEngine extends EngineUtils {
     for (const bodyId of bodiesToRender) {
       this.renderBody(bodyId)
     }
-
-    this.saveToLocalStorage()
   }
 
   // Add public method to set plant data

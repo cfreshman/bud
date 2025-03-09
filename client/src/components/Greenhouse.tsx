@@ -4,7 +4,7 @@ import { PlantData } from '../engine/types'
 
 interface GreenhouseProps {
   plants: Map<number, PlantData>
-  onSelectPlot: (plotIndex: number, plantData?: PlantData) => void
+  onSelectPlot: (plotIndex: number) => void
 }
 
 export function Greenhouse({ plants, onSelectPlot }: GreenhouseProps) {
@@ -17,8 +17,7 @@ export function Greenhouse({ plants, onSelectPlot }: GreenhouseProps) {
     // Only create engine if it doesn't exist
     if (!engineRef.current) {
       engineRef.current = new ViewEngine(containerRef.current, (plotIndex) => {
-        const plantData = engineRef.current?.getPlantFromPlot(plotIndex)
-        onSelectPlot(plotIndex, plantData)
+        onSelectPlot(plotIndex)
       })
     }
 
