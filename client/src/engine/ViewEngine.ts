@@ -22,8 +22,7 @@ export class ViewEngine extends EngineUtils {
     this.scene.background = new THREE.Color('#88aa99')
 
     // Adjust camera for greenhouse view
-    this.camera.position.set(0, 6, 8)
-    this.camera.lookAt(0, 0, 0)
+    this.camera.position.set(0, 8, 8)
     this.controls.target.set(0, 0, 0)
     this.controls.update()
 

@@ -27,11 +27,25 @@ export function ChatView({ plant, onClose }: ChatViewProps) {
     
     // Add saved messages to chat engine when it's initialized
     if (chatEngine && savedMessages.length > 0) {
-      savedMessages.forEach(msg => {
-        if (msg.sender === 'plant') {
-          chatEngine.addMessage(plant.plantId!, msg.content, 'plant')
-        }
-      })
+      // First clear any existing messages
+      chatEngine.addMessage(plant.plantId, '', 'plant')
+      
+      // Add all messages to the chat engine in order, but skip showing thinking bubbles
+      for (let i = 0; i < savedMessages.length; i++) {
+        const msg = savedMessages[i];
+        const isLastMessage = i === savedMessages.length - 1;
+        
+        // For the last message, don't skip thinking if it's from a user
+        const skipThinking = !(isLastMessage && msg.sender === 'user');
+        
+        chatEngine.addMessage(plant.plantId!, msg.content, msg.sender, skipThinking);
+      }
+      
+      // If the last message is from the user, show a "..." bubble
+      const lastMessage = savedMessages[savedMessages.length - 1]
+      if (lastMessage && lastMessage.sender === 'user') {
+        chatEngine.addMessage(plant.plantId, '...', 'plant')
+      }
     }
   }, [plant.plantId, chatEngine])
 
@@ -73,14 +87,8 @@ export function ChatView({ plant, onClose }: ChatViewProps) {
     
     setIsLoading(true)
     
-    // Add user message
-    const userMessage: Message = {
-      id: crypto.randomUUID(),
-      plantId: plant.plantId,
-      content: input,
-      sender: 'user',
-      timestamp: Date.now()
-    }
+    // Add user message to ChatEngine - this will automatically show a "..." bubble
+    const userMessage = chatEngine.addMessage(plant.plantId, input, 'user')
     
     // Clear input and reset textarea height
     setInput('')

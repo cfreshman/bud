@@ -105,7 +105,7 @@ export class ChatEngine extends EngineUtils {
     this.roots = new Set(data.roots);
   }
 
-  addMessage(plantId: string, content: string, sender: 'user' | 'plant') {
+  addMessage(plantId: string, content: string, sender: 'user' | 'plant', skipThinking: boolean = false) {
     let conversation = this.conversations.get(plantId)
     
     if (!conversation) {
@@ -130,6 +130,11 @@ export class ChatEngine extends EngineUtils {
     // If it's a plant message, show the speech bubble
     if (sender === 'plant') {
       this.showSpeechBubble(content)
+    } 
+    // If it's a user message, show a "..." bubble for the plant (unless skipThinking is true)
+    else if (sender === 'user' && content.trim() !== '' && !skipThinking) {
+      // Show a "..." bubble for the plant
+      this.showSpeechBubble('...')
     }
 
     return message
@@ -144,45 +149,85 @@ export class ChatEngine extends EngineUtils {
     if (!this.domElement) return;
     
     // Clear any existing speech bubbles
-    const existingBubbles = this.domElement.querySelectorAll('.chat-bubble');
+    const existingBubbles = this.domElement.querySelectorAll('.bubble-container');
     existingBubbles.forEach(bubble => bubble.remove());
 
     // If empty text, just clear bubbles and return
     if (!text) return;
-
+    
+    // Find the last user message if available
+    let lastUserMessage = '';
+    const isThinking = text === '...';
+    
+    if (this.plantData?.plantId) {
+      const conversation = this.conversations.get(this.plantData.plantId);
+      if (conversation && conversation.messages.length > 0) {
+        // Find the most recent user message
+        for (let i = conversation.messages.length - 1; i >= 0; i--) {
+          const msg = conversation.messages[i];
+          if (msg.sender === 'user') {
+            lastUserMessage = msg.content;
+            break;
+          }
+        }
+      }
+    }
+    
     // Find the plant's head bone
     const headBone = Array.from(this.bones.values()).find(bone => bone.isHead)
     if (!headBone) return
-
+    
     // Get head bone's world position
     const transform = this.boneTransforms.get(headBone.id)
     if (!transform) return
-
+    
     // Get screen position
     const position = new THREE.Vector3()
     position.setFromMatrixPosition(transform)
-    position.y += headBone.length * 1.5 // Position higher above head
-
+    position.y += headBone.length * 1.4 // Position higher above head
+    
     // Project to screen coordinates
     const screenPosition = position.clone()
     screenPosition.project(this.camera)
-
+    
     // Convert to pixel coordinates
     const x = (screenPosition.x + 1) * this.domElement.clientWidth / 2
     const y = (-screenPosition.y + 1) * this.domElement.clientHeight / 2
-
-    // Create speech bubble (no triangle stem)
-    const bubble = document.createElement('div')
-    bubble.className = 'chat-bubble'
-    bubble.style.position = 'absolute'
-    bubble.style.left = `${x}px`
-    bubble.style.top = `${y}px`
-    bubble.style.transform = 'translate(-50%, -150%)' // Move it higher
-    bubble.textContent = text
-    this.domElement.appendChild(bubble)
-
-    // Make visible immediately
-    bubble.style.opacity = '1'
+    
+    // Create container for both messages
+    const bubbleContainer = document.createElement('div');
+    bubbleContainer.className = 'bubble-container';
+    bubbleContainer.style.position = 'absolute';
+    bubbleContainer.style.left = `${x}px`;
+    bubbleContainer.style.top = `${y}px`;
+    bubbleContainer.style.transform = 'translate(-50%, -100%)';
+    
+    // Add user message if available
+    if (lastUserMessage) {
+      const userBubble = document.createElement('div');
+      userBubble.className = 'chat-bubble user-bubble';
+      userBubble.textContent = lastUserMessage;
+      bubbleContainer.appendChild(userBubble);
+    }
+    
+    // Add plant message
+    const plantBubble = document.createElement('div');
+    plantBubble.className = 'chat-bubble plant-bubble';
+    if (isThinking) {
+      plantBubble.className += ' thinking-bubble';
+    }
+    plantBubble.textContent = text;
+    bubbleContainer.appendChild(plantBubble);
+    
+    // Add to DOM
+    this.domElement.appendChild(bubbleContainer);
+    
+    // Adjust position if the bubble is too close to the top of the screen
+    const bubbleRect = bubbleContainer.getBoundingClientRect();
+    if (bubbleRect.top < 20) {
+      const newTop = y + (20 - bubbleRect.top);
+      bubbleContainer.style.top = `${newTop}px`;
+    }
   }
 
   protected override animate() {
