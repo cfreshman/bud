@@ -13,69 +13,82 @@ function App() {
   const [plants, setPlants] = useState<Map<number, PlantData>>(new Map())
   const [isEditing, setIsEditing] = useState(false)
   const [isChatting, setIsChatting] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
   const [activeEditingPlant, setActiveEditingPlant] = useState<PlantData | undefined>()
   const viewEngineRef = useRef<ViewEngine | null>(null)
 
   // Load plants from localStorage on mount
   useEffect(() => {
-    try {
-      const savedPlants = new Map<number, PlantData>()
-      for (let i = 0; i < 6; i++) {
-        const savedPlantStr = localStorage.getItem(`greenhouse_plot_${i}`)
-        if (savedPlantStr) {
-          try {
-            const plantData = deserializePlantData(savedPlantStr)
-            // Re-save if we generated a new ID
-            if (!savedPlantStr.includes('"plantId"')) {
-              localStorage.setItem(`greenhouse_plot_${i}`, serializePlantData(plantData))
+    const loadData = async () => {
+      setIsLoading(true)
+      
+      try {
+        const savedPlants = new Map<number, PlantData>()
+        for (let i = 0; i < 6; i++) {
+          const savedPlantStr = localStorage.getItem(`greenhouse_plot_${i}`)
+          if (savedPlantStr) {
+            try {
+              const plantData = deserializePlantData(savedPlantStr)
+              // Re-save if we generated a new ID
+              if (!savedPlantStr.includes('"plantId"')) {
+                localStorage.setItem(`greenhouse_plot_${i}`, serializePlantData(plantData))
+              }
+              savedPlants.set(i, plantData)
+            } catch (error) {
+              console.error(`Failed to load plot ${i}:`, error)
             }
-            savedPlants.set(i, plantData)
-          } catch (error) {
-            console.error(`Failed to load plot ${i}:`, error)
           }
         }
-      }
-      console.log('Loading plants from localStorage:', savedPlants.size, 'plants')
-      setPlants(savedPlants)
+        console.log('Loading plants from localStorage:', savedPlants.size, 'plants')
+        setPlants(savedPlants)
 
-      // Load active editing state if it exists
-      const editorStateStr = localStorage.getItem('editor_plant_state')
-      if (editorStateStr) {
-        try {
-          const editorState = JSON.parse(editorStateStr)
-          const plantData = deserializePlantData(editorState.plantData)
-          setActiveEditingPlant(plantData)
-          setSelectedPlot(editorState.plotIndex)
-          setIsEditing(true)
-        } catch (error) {
-          console.error('Failed to load editor state:', error)
-          localStorage.removeItem('editor_plant_state')
+        // Load active editing state if it exists
+        const editorStateStr = localStorage.getItem('editor_plant_state')
+        if (editorStateStr) {
+          try {
+            const editorState = JSON.parse(editorStateStr)
+            const plantData = deserializePlantData(editorState.plantData)
+            setActiveEditingPlant(plantData)
+            setSelectedPlot(editorState.plotIndex)
+            setIsEditing(true)
+          } catch (error) {
+            console.error('Failed to load editor state:', error)
+            localStorage.removeItem('editor_plant_state')
+          }
         }
-      }
-      
-      // Load active chat state if it exists
-      const chatStateStr = localStorage.getItem('chat_state')
-      if (chatStateStr && !isEditing) {
-        try {
-          const chatState = JSON.parse(chatStateStr)
-          const plotIndex = chatState.plotIndex
-          
-          // Only restore chat if the plant exists
-          if (savedPlants.has(plotIndex)) {
-            setSelectedPlot(plotIndex)
-            setIsChatting(true)
-          } else {
-            // Clean up invalid chat state
+        
+        // Load active chat state if it exists
+        const chatStateStr = localStorage.getItem('chat_state')
+        if (chatStateStr && !isEditing) {
+          try {
+            const chatState = JSON.parse(chatStateStr)
+            const plotIndex = chatState.plotIndex
+            
+            // Only restore chat if the plant exists
+            if (savedPlants.has(plotIndex)) {
+              setSelectedPlot(plotIndex)
+              setIsChatting(true)
+            } else {
+              // Clean up invalid chat state
+              localStorage.removeItem('chat_state')
+            }
+          } catch (error) {
+            console.error('Failed to load chat state:', error)
             localStorage.removeItem('chat_state')
           }
-        } catch (error) {
-          console.error('Failed to load chat state:', error)
-          localStorage.removeItem('chat_state')
         }
+      } catch (error) {
+        console.error('Failed to load plants:', error)
+      } finally {
+        // Add a small delay to ensure the loading screen is visible
+        // even if loading is very fast
+        setTimeout(() => {
+          setIsLoading(false)
+        }, 800)
       }
-    } catch (error) {
-      console.error('Failed to load plants:', error)
     }
+    
+    loadData()
   }, [])
 
   // Save chat state whenever it changes
@@ -166,7 +179,9 @@ function App() {
 
   return (
     <div className="app">
-      {isEditing ? (
+      {isLoading ? (
+        <LoadingScreen />
+      ) : isEditing ? (
         <Editor 
           plantData={activeEditingPlant}
           plotIndex={selectedPlot || 0}
@@ -186,6 +201,14 @@ function App() {
           onStartChat={handleStartChat}
         />
       )}
+    </div>
+  )
+}
+
+function LoadingScreen() {
+  return (
+    <div className="loading-screen">
+      <div className="loading-text">bud 🌱</div>
     </div>
   )
 }
