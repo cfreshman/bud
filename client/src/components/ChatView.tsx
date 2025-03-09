@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { PlantData } from '../engine/types'
 import { ChatEngine, Message } from '../engine/ChatEngine'
 import { sendMessageToPlant } from '../services/api'
+import { loadMessages, saveMessages, clearMessages } from '../utils/chatStorage'
 
 interface ChatViewProps {
   plant: PlantData
@@ -16,6 +17,29 @@ export function ChatView({ plant, onClose }: ChatViewProps) {
   const [showHistory, setShowHistory] = useState(false)
   const [messages, setMessages] = useState<Message[]>([])
   const [isLoading, setIsLoading] = useState(false)
+
+  // Load messages from localStorage when component mounts
+  useEffect(() => {
+    if (!plant.plantId) return
+    
+    const savedMessages = loadMessages(plant.plantId)
+    setMessages(savedMessages)
+    
+    // Add saved messages to chat engine when it's initialized
+    if (chatEngine && savedMessages.length > 0) {
+      savedMessages.forEach(msg => {
+        if (msg.sender === 'plant') {
+          chatEngine.addMessage(plant.plantId!, msg.content, 'plant')
+        }
+      })
+    }
+  }, [plant.plantId, chatEngine])
+
+  // Save messages to localStorage when they change
+  useEffect(() => {
+    if (!plant.plantId || messages.length === 0) return
+    saveMessages(plant.plantId, messages)
+  }, [plant.plantId, messages])
 
   useEffect(() => {
     if (!containerRef.current || !plant.plantId) return
@@ -40,11 +64,23 @@ export function ChatView({ plant, onClose }: ChatViewProps) {
   }, [input])
 
   const handleSend = async () => {
-    if (!chatEngine || !input.trim() || !plant.plantId) return
-
+    if (!input.trim() || !plant.plantId || !chatEngine || isLoading) return
+    
+    // Clear any existing plant message in the 3D view
+    if (plant.plantId) {
+      chatEngine.addMessage(plant.plantId, '', 'plant')
+    }
+    
+    setIsLoading(true)
+    
     // Add user message
-    const userMessage = chatEngine.addMessage(plant.plantId, input, 'user')
-    setMessages(prev => [...prev, userMessage])
+    const userMessage: Message = {
+      id: crypto.randomUUID(),
+      plantId: plant.plantId,
+      content: input,
+      sender: 'user',
+      timestamp: Date.now()
+    }
     
     // Clear input and reset textarea height
     setInput('')
@@ -52,24 +88,47 @@ export function ChatView({ plant, onClose }: ChatViewProps) {
       textareaRef.current.style.height = 'auto'
     }
 
-    // Show loading state
-    setIsLoading(true)
-
     try {
       // Get plant's response from API
       const plantResponse = await sendMessageToPlant(plant.plantId, input, plant)
       
       // Add plant message
       const plantMessage = chatEngine.addMessage(plant.plantId, plantResponse, 'plant')
-      setMessages(prev => [...prev, plantMessage])
+      setMessages(prev => [...prev, userMessage, plantMessage])
     } catch (error) {
       console.error('Error getting plant response:', error)
       // Add fallback message if API fails
       const fallbackResponse = "I'm having trouble understanding right now."
+      const fallbackMessage = {
+        id: crypto.randomUUID(),
+        plantId: plant.plantId,
+        content: fallbackResponse,
+        sender: 'plant' as const,
+        timestamp: Date.now()
+      }
       chatEngine.addMessage(plant.plantId, fallbackResponse, 'plant')
+      setMessages(prev => [...prev, userMessage, fallbackMessage])
     } finally {
       setIsLoading(false)
     }
+  }
+
+  const handleClearHistory = () => {
+    if (!plant.plantId || !chatEngine) return
+    
+    // Clear messages in localStorage
+    clearMessages(plant.plantId)
+    
+    // Clear messages in state
+    setMessages([])
+    
+    // Clear any visible speech bubble
+    if (plant.plantId) {
+      chatEngine.addMessage(plant.plantId, '', 'plant')
+    }
+    
+    // Close history overlay
+    setShowHistory(false)
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -124,12 +183,20 @@ export function ChatView({ plant, onClose }: ChatViewProps) {
         <div className="chat-history-modal">
           <div className="chat-history-header">
             <h3>conversation history</h3>
-            <button 
-              className="chat-history-close"
-              onClick={() => setShowHistory(false)}
-            >
-              ×
-            </button>
+            <div>
+              <button 
+                className="chat-history-clear"
+                onClick={handleClearHistory}
+              >
+                clear
+              </button>
+              <button 
+                className="chat-history-close"
+                onClick={() => setShowHistory(false)}
+              >
+                ×
+              </button>
+            </div>
           </div>
           <div className="chat-history-messages">
             {messages.map(msg => (

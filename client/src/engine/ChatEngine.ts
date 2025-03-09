@@ -102,27 +102,6 @@ export class ChatEngine extends EngineUtils {
     this.bones = new Map(data.bones);
     this.bodies = new Map(data.bodies);
     this.roots = new Set(data.roots);
-    
-    // Place plant at center of scene, properly positioned in the pot
-    const body = Array.from(this.bodies.values())[0];
-    if (body) {
-      // Position the plant at the center of the pot, at the correct height
-      const offsetPosition = new THREE.Vector3(0, 0.45, 0);
-      
-      // Create a transform matrix for the body
-      const transform = new THREE.Matrix4().makeBasis(
-        body.transform.right,
-        body.transform.up, 
-        body.transform.forward
-      );
-      transform.setPosition(offsetPosition);
-      
-      // Update the body's transform with the new position
-      body.transform.position.copy(offsetPosition);
-      
-      // Render the plant
-      this.renderPlant(data);
-    }
   }
 
   addMessage(plantId: string, content: string, sender: 'user' | 'plant') {
@@ -160,9 +139,15 @@ export class ChatEngine extends EngineUtils {
   }
 
   private showSpeechBubble(text: string) {
+    // Check if domElement exists (might be null during disposal)
+    if (!this.domElement) return;
+    
     // Clear any existing speech bubbles
     const existingBubbles = this.domElement.querySelectorAll('.chat-bubble');
     existingBubbles.forEach(bubble => bubble.remove());
+
+    // If empty text, just clear bubbles and return
+    if (!text) return;
 
     // Find the plant's head bone
     const headBone = Array.from(this.bones.values()).find(bone => bone.isHead)

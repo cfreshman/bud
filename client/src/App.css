@@ -520,6 +520,11 @@
   font-family: monospace;
 }
 
+.chat-history-header > div {
+  display: flex;
+  gap: 8px;
+}
+
 .chat-history-close {
   background: #fdfdfd;
   border: 1px solid #000000;
@@ -533,6 +538,20 @@
   justify-content: center;
   width: 24px;
   height: 24px;
+}
+
+.chat-history-clear {
+  background: #fdfdfd;
+  border: 1px solid #000000;
+  border-radius: 999px;
+  color: #000000;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 4px 8px;
+  font-family: monospace;
+  height: 24px;
+  display: flex;
+  align-items: center;
 }
 
 .chat-history-messages {

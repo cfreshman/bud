@@ -4,6 +4,7 @@ import { Editor } from './components/Editor'
 import { ViewEngine } from './engine/ViewEngine'
 import { PlantData } from './engine/types'
 import { serializePlantData, deserializePlantData } from './utils/plantSaveUtils'
+import { deleteMessagesForPlot } from './utils/chatStorage'
 import './App.css'
 
 function App() {
@@ -151,22 +152,22 @@ function App() {
   const handleDeletePlant = () => {
     if (selectedPlot === null) return
     
-    try {
-      // Remove from localStorage first
-      localStorage.removeItem(`greenhouse_plot_${selectedPlot}`)
-      
-      // Then remove from plants Map
-      const newPlants = new Map(plants)
+    // Delete chat messages for this plot
+    deleteMessagesForPlot(selectedPlot)
+    
+    // Remove plant from localStorage
+    localStorage.removeItem(`greenhouse_plot_${selectedPlot}`)
+    
+    // Update state
+    setPlants(prev => {
+      const newPlants = new Map(prev)
       newPlants.delete(selectedPlot)
-      setPlants(newPlants)
-      
-      // Clear editing state
-      setSelectedPlot(null)
-      setIsEditing(false)
-      setActiveEditingPlant(undefined)
-    } catch (error) {
-      console.error('Failed to delete plant:', error)
-    }
+      return newPlants
+    })
+    
+    // Exit edit mode
+    setIsEditing(false)
+    setSelectedPlot(null)
   }
 
   return (
