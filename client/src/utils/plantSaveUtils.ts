@@ -1,10 +1,23 @@
 import * as THREE from 'three'
 import { PlantData } from '../engine/types'
+import { generateUUID } from './idUtils'
+
+interface SerializedRoot {
+  plantId?: string
+  partData: any
+  transform?: {
+    position: number[]
+    up: number[]
+    right: number[]
+    forward: number[]
+  }
+}
 
 export function serializePlantData(data: PlantData): string {
   const rootData = Array.from(data.roots).map(rootId => {
     const body = Array.from(data.bodies.values()).find(b => b.rootPartId === rootId)
     return {
+      plantId: data.plantId,
       partData: serializePartData(rootId, data),
       transform: body ? {
         position: body.transform.position.toArray(),
@@ -53,8 +66,9 @@ function serializePartData(partId: string, data: PlantData): any {
 }
 
 export function deserializePlantData(serialized: string): PlantData {
-  const rootData = JSON.parse(serialized)
+  const rootData = JSON.parse(serialized) as SerializedRoot[]
   const result: PlantData = {
+    plantId: rootData[0]?.plantId || generateUUID(),
     parts: new Map(),
     bones: new Map(),
     bodies: new Map(),

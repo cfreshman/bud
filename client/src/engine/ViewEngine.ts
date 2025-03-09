@@ -186,6 +186,7 @@ export class ViewEngine extends EngineUtils {
 
       // Store the original data without plot offset
       this.activePlots.set(plotIndex, {
+        plantId: plantData.plantId,
         parts: new Map(plantData.parts),
         bones: new Map(plantData.bones),
         bodies: new Map(plantData.bodies),
@@ -204,6 +205,7 @@ export class ViewEngine extends EngineUtils {
   private createOffsetPlantData(plantData: PlantData, plotOffset: THREE.Vector3): PlantData {
     // Create deep clone of plant data
     const offsetData: PlantData = {
+      plantId: plantData.plantId,
       parts: new Map(plantData.parts),
       bones: new Map(plantData.bones),
       bodies: new Map(),

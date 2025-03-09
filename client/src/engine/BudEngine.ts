@@ -13,6 +13,7 @@ import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPa
 import { InputManager } from './InputManager'
 import { EngineUtils } from './EngineUtils'
 import { PlantData } from './types'
+import { generateUUID } from '../utils/idUtils'
 
 export type PartType = 'stem' | 'leaf' | 'thorn' | 'flower'
 
@@ -104,6 +105,7 @@ export class BudEngine extends EngineUtils {
   protected groundPlane!: THREE.Mesh
   protected isEditor: boolean
   protected isCloseUp: boolean
+  protected plantId?: string
 
   constructor(container: HTMLElement, callbacks?: { 
     onSelect?: (data: { 
@@ -1180,60 +1182,41 @@ export class BudEngine extends EngineUtils {
     isHead?: boolean,
     attributes?: PartAttributes
   }): string {
-    const id = Math.random().toString(36).substr(2, 9)
-    
-    // Create the part with default attributes
+    // If this is the first part, generate a plantId
+    if (this.roots.size === 0) {
+      this.plantId = generateUUID()
+    }
+
+    const partId = Math.random().toString(36).substr(2, 9)
     const part: Part = {
-      id,
+      id: partId,
       type: params.type,
-      attributes: {
-        // Only set default color for leaf, thorn, and flower
-        ...(params.type !== 'stem' && { color: this.getDefaultColor(params.type) }),
-      },
+      attributes: params.attributes || {},
       boneIds: []
     }
-    
-    // Create initial bone for the part
+
+    // Add to parts map
+    this.parts.set(partId, part)
+
+    // Create initial bone
     const boneId = this.addBone({
-      partId: id,
-      position: params.worldPosition.clone(),
-      length: params.length || 0.3,
-      width: params.width || 0.05,
+      partId,
+      position: params.worldPosition,
+      length: params.length,
+      width: params.width,
       isHead: params.isHead
     })
-    
-    // Add bone to part's sequence
-    part.boneIds.push(boneId)
-    
-    // Log before storing
-    console.log('BudEngine: Before storing part', {
-      id,
-      type: params.type,
-      partsMapSize: this.parts.size,
-      partsMapKeys: Array.from(this.parts.keys())
-    })
-    
-    // Store the part
-    this.parts.set(id, part)
-    this.partAdded = true // Set flag when part is added
-    
-    // Log after storing
-    console.log('BudEngine: After storing part', {
-      id,
-      type: params.type,
-      partsMapSize: this.parts.size,
-      partsMapKeys: Array.from(this.parts.keys()),
-      storedPart: this.parts.get(id),
-      partAdded: this.partAdded
-    })
-    
-    // Add to roots since it starts with no parent
-    this.roots.add(id)
-    
-    // Create body for new root part
-    const body = this.createBodyForPart(id)
 
-    return id
+    // Add bone to part's bone list
+    part.boneIds.push(boneId)
+
+    // If this is the first part, make it a root
+    if (this.roots.size === 0) {
+      this.roots.add(partId)
+      this.createBodyForPart(partId)
+    }
+
+    return partId
   }
 
   protected getBoneIdFromMesh(mesh: THREE.Object3D): string | undefined {
@@ -2157,6 +2140,7 @@ export class BudEngine extends EngineUtils {
 
   // Add public method to set plant data
   setPlantData(data: PlantData) {
+    this.plantId = data.plantId
     this.parts = new Map(data.parts)
     this.bones = new Map(data.bones)
     this.bodies = new Map(data.bodies)
@@ -2167,6 +2151,7 @@ export class BudEngine extends EngineUtils {
   // Add public method to get plant data
   getPlantData(): PlantData {
     return {
+      plantId: this.plantId,
       parts: this.parts,
       bones: this.bones,
       bodies: this.bodies,

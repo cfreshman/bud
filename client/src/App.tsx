@@ -22,6 +22,10 @@ function App() {
         if (savedPlantStr) {
           try {
             const plantData = deserializePlantData(savedPlantStr)
+            // Re-save if we generated a new ID
+            if (!savedPlantStr.includes('"plantId"')) {
+              localStorage.setItem(`greenhouse_plot_${i}`, serializePlantData(plantData))
+            }
             savedPlants.set(i, plantData)
           } catch (error) {
             console.error(`Failed to load plot ${i}:`, error)

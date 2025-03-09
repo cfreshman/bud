@@ -48,6 +48,7 @@ export interface Body {
 }
 
 export interface PlantData {
+  plantId?: string  // Unique ID for the plant, used for chat/persistence
   parts: Map<string, Part>
   bones: Map<string, Bone>
   bodies: Map<string, Body>
