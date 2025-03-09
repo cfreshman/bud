@@ -3,9 +3,12 @@ import { ViewEngine } from './engine/ViewEngine'
 import { Editor } from './components/Editor'
 import { Greenhouse } from './components/Greenhouse'
 import { ChatView } from './components/ChatView'
+import { LoginView } from './components/LoginView'
 import { PlantData } from './engine/types'
 import { serializePlantData, deserializePlantData } from './utils/plantSaveUtils'
 import { deleteMessagesForPlot } from './utils/chatStorage'
+import { isLoggedIn } from './services/auth'
+import { loadPlants, savePlant, deletePlant } from './services/plants'
 import './App.css'
 
 function App() {
@@ -14,32 +17,33 @@ function App() {
   const [isEditing, setIsEditing] = useState(false)
   const [isChatting, setIsChatting] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
+  const [isAuthChecking, setIsAuthChecking] = useState(true)
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [activeEditingPlant, setActiveEditingPlant] = useState<PlantData | undefined>()
   const viewEngineRef = useRef<ViewEngine | null>(null)
 
-  // Load plants from localStorage on mount
+  // Check auth state on mount
   useEffect(() => {
+    const checkAuth = async () => {
+      setIsAuthChecking(true)
+      setIsAuthenticated(isLoggedIn())
+      setIsAuthChecking(false)
+    }
+    checkAuth()
+  }, [])
+
+  // Load plants from cloud when authenticated
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setIsLoading(false)
+      return
+    }
+
     const loadData = async () => {
       setIsLoading(true)
       
       try {
-        const savedPlants = new Map<number, PlantData>()
-        for (let i = 0; i < 6; i++) {
-          const savedPlantStr = localStorage.getItem(`greenhouse_plot_${i}`)
-          if (savedPlantStr) {
-            try {
-              const plantData = deserializePlantData(savedPlantStr)
-              // Re-save if we generated a new ID
-              if (!savedPlantStr.includes('"plantId"')) {
-                localStorage.setItem(`greenhouse_plot_${i}`, serializePlantData(plantData))
-              }
-              savedPlants.set(i, plantData)
-            } catch (error) {
-              console.error(`Failed to load plot ${i}:`, error)
-            }
-          }
-        }
-        console.log('Loading plants from localStorage:', savedPlants.size, 'plants')
+        const savedPlants = await loadPlants()
         setPlants(savedPlants)
 
         // Load active editing state if it exists
@@ -80,8 +84,6 @@ function App() {
       } catch (error) {
         console.error('Failed to load plants:', error)
       } finally {
-        // Add a small delay to ensure the loading screen is visible
-        // even if loading is very fast
         setTimeout(() => {
           setIsLoading(false)
         }, 800)
@@ -89,7 +91,22 @@ function App() {
     }
     
     loadData()
-  }, [])
+  }, [isAuthenticated])
+
+  // Reload plants when returning from editor
+  useEffect(() => {
+    if (!isEditing && isAuthenticated && !isLoading) {
+      const reloadPlants = async () => {
+        try {
+          const savedPlants = await loadPlants()
+          setPlants(savedPlants)
+        } catch (error) {
+          console.error('Failed to reload plants:', error)
+        }
+      }
+      reloadPlants()
+    }
+  }, [isEditing, isAuthenticated, isLoading])
 
   // Save chat state whenever it changes
   useEffect(() => {
@@ -128,14 +145,14 @@ function App() {
     setSelectedPlot(null)
   }
 
-  const handleSavePlant = (plantData: PlantData) => {
+  const handleSavePlant = async (plantData: PlantData) => {
     if (selectedPlot === null) return
     
     try {
-      // Save to localStorage first
-      localStorage.setItem(`greenhouse_plot_${selectedPlot}`, serializePlantData(plantData))
+      // Save to cloud
+      await savePlant(selectedPlot, plantData)
       
-      // Then update plants Map
+      // Update local state
       const newPlants = new Map(plants)
       newPlants.set(selectedPlot, plantData)
       setPlants(newPlants)
@@ -156,25 +173,47 @@ function App() {
     setActiveEditingPlant(undefined)
   }
 
-  const handleDeletePlant = () => {
+  const handleDeletePlant = async () => {
     if (selectedPlot === null) return
     
-    // Delete chat messages for this plot
-    deleteMessagesForPlot(selectedPlot)
-    
-    // Remove plant from localStorage
-    localStorage.removeItem(`greenhouse_plot_${selectedPlot}`)
-    
-    // Update state
-    setPlants(prev => {
-      const newPlants = new Map(prev)
-      newPlants.delete(selectedPlot)
-      return newPlants
-    })
-    
-    // Exit edit mode
-    setIsEditing(false)
+    try {
+      // Delete from cloud
+      await deletePlant(selectedPlot)
+      
+      // Delete chat messages
+      deleteMessagesForPlot(selectedPlot)
+      
+      // Update local state
+      setPlants(prev => {
+        const newPlants = new Map(prev)
+        newPlants.delete(selectedPlot)
+        return newPlants
+      })
+      
+      // Exit edit mode
+      setIsEditing(false)
+      setSelectedPlot(null)
+    } catch (error) {
+      console.error('Failed to delete plant:', error)
+    }
+  }
+
+  const handleLogout = () => {
+    setIsAuthenticated(false)
+    setPlants(new Map())
     setSelectedPlot(null)
+    setIsEditing(false)
+    setIsChatting(false)
+    setActiveEditingPlant(undefined)
+    localStorage.clear() // Clear all plant and chat data
+  }
+
+  if (isAuthChecking) {
+    return <LoadingScreen />
+  }
+
+  if (!isAuthenticated) {
+    return <LoginView onLogin={() => setIsAuthenticated(true)} />
   }
 
   return (
@@ -199,6 +238,7 @@ function App() {
           plants={plants}
           onSelectPlot={handleSelectPlot}
           onStartChat={handleStartChat}
+          onLogout={handleLogout}
         />
       )}
     </div>
@@ -208,7 +248,7 @@ function App() {
 function LoadingScreen() {
   return (
     <div className="loading-screen">
-      <div className="loading-text">bud 🌱</div>
+      <div className="loading-text">bud 🌱 loading</div>
     </div>
   )
 }

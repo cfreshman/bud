@@ -4,3 +4,4 @@ we're creating "bud", a Spore-like AI plant companion game/simulation/chatbot
 - the player will be able to cultivate multiple buds, each with unique personalities determined by the parts used in their construction (thorns vs flowers, etc) and their conversation with the player
 - do not remove or break any existing code you're not supposed to. never degrade functionality
 - use a single App.css file for all styles
+- if i edit something, don't revert it back

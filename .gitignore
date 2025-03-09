@@ -39,4 +39,7 @@ yarn-error.log*
 .cache/
 .parcel-cache/
 .temp/
-.tmp/ 
+.tmp/
+
+# MongoDB data directory
+server/data/db/ 

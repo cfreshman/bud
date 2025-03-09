@@ -1182,25 +1182,27 @@ export class BudEngine extends EngineUtils {
     isHead?: boolean,
     attributes?: PartAttributes
   }): string {
-    // If this is the first part, generate a plantId
-    if (this.roots.size === 0) {
-      this.plantId = generateUUID()
-    }
-
-    const partId = Math.random().toString(36).substr(2, 9)
+    const id = Math.random().toString(36).substr(2, 9)
+    
+    // Create the part with merged attributes
     const part: Part = {
-      id: partId,
+      id,
       type: params.type,
-      attributes: params.attributes || {},
+      attributes: {
+        // Set default color for non-stem parts
+        ...(params.type !== 'stem' && { color: this.getDefaultColor(params.type) }),
+        // Merge with provided attributes, allowing them to override defaults
+        ...params.attributes
+      },
       boneIds: []
     }
 
     // Add to parts map
-    this.parts.set(partId, part)
+    this.parts.set(id, part)
 
     // Create initial bone
     const boneId = this.addBone({
-      partId,
+      partId: id,
       position: params.worldPosition,
       length: params.length,
       width: params.width,
@@ -1212,11 +1214,11 @@ export class BudEngine extends EngineUtils {
 
     // If this is the first part, make it a root
     if (this.roots.size === 0) {
-      this.roots.add(partId)
-      this.createBodyForPart(partId)
+      this.roots.add(id)
+      this.createBodyForPart(id)
     }
 
-    return partId
+    return id
   }
 
   protected getBoneIdFromMesh(mesh: THREE.Object3D): string | undefined {

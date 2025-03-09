@@ -4,14 +4,16 @@ import { PlantData } from '../engine/types'
 import { deserializePlantData } from '../utils/plantSaveUtils'
 import { PlotMenu } from './PlotMenu'
 import { ChatView } from './ChatView'
+import { removeToken } from '../services/auth'
 
 interface GreenhouseProps {
   plants: Map<number, PlantData>
   onSelectPlot: (plotIndex: number) => void
-  onStartChat?: (plotIndex: number) => void
+  onStartChat: (plotIndex: number) => void
+  onLogout: () => void
 }
 
-export function Greenhouse({ plants, onSelectPlot, onStartChat }: GreenhouseProps) {
+export function Greenhouse({ plants, onSelectPlot, onStartChat, onLogout }: GreenhouseProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const engineRef = useRef<ViewEngine | null>(null)
   const cleanupRef = useRef(false)
@@ -24,10 +26,13 @@ export function Greenhouse({ plants, onSelectPlot, onStartChat }: GreenhouseProp
 
   // Create click handler with access to current plants
   const handlePlotClick = useCallback((plotIndex: number) => {
-    // Only show menu if plot has a plant
-    if (!plants.has(plotIndex)) return
+    // If plot is empty, go directly to edit mode
+    if (!plants.has(plotIndex)) {
+      onSelectPlotRef.current(plotIndex)
+      return
+    }
 
-    // Get plot position
+    // Otherwise show menu for populated plots
     const position = engineRef.current?.getPlotScreenPosition(plotIndex)
     if (!position) return
 
@@ -107,40 +112,52 @@ export function Greenhouse({ plants, onSelectPlot, onStartChat }: GreenhouseProp
   }
 
   return (
-    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
-      <div 
-        ref={containerRef} 
-        style={{ 
-          width: '100%', 
-          height: '100%',
-          backgroundColor: '#111419'
+    <>
+      <button 
+        className="chat-button"
+        onClick={onLogout}
+        style={{
+          position: 'fixed',
+          top: '20px',
+          left: '20px',
+          zIndex: 1000
         }}
-      />
-      <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
-        {menuState && (
-          <PlotMenu
-            position={menuState.position}
-            onSelect={(action) => {
-              if (action === 'edit') {
-                onSelectPlotRef.current(menuState.plotIndex)
-              } else if (action === 'chat') {
-                if (onStartChat) {
-                  // Use the new prop if provided
-                  onStartChat(menuState.plotIndex)
-                } else {
-                  // Fall back to existing behavior
-                  const plant = plants.get(menuState.plotIndex)
-                  if (plant) {
-                    setChatState({ plant })
+      >
+        logout
+      </button>
+      <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+        <div 
+          ref={containerRef} 
+          style={{ 
+            width: '100%', 
+            height: '100%',
+            backgroundColor: '#111419'
+          }}
+        />
+        <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
+          {menuState && (
+            <PlotMenu
+              position={menuState.position}
+              onSelect={(action) => {
+                if (action === 'edit') {
+                  onSelectPlotRef.current(menuState.plotIndex)
+                } else if (action === 'chat') {
+                  if (onStartChat) {
+                    onStartChat(menuState.plotIndex)
+                  } else {
+                    const plant = plants.get(menuState.plotIndex)
+                    if (plant) {
+                      setChatState({ plant })
+                    }
                   }
                 }
-              }
-              setMenuState(null)
-            }}
-            onClose={() => setMenuState(null)}
-          />
-        )}
+                setMenuState(null)
+              }}
+              onClose={() => setMenuState(null)}
+            />
+          )}
+        </div>
       </div>
-    </div>
+    </>
   )
 } 

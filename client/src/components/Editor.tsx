@@ -83,10 +83,13 @@ export function Editor({ plantData, plotIndex, onSave, onCancel, onDelete }: Edi
 
     return () => {
       clearInterval(interval)
-      // Clear editor state when unmounting
-      localStorage.removeItem('editor_plant_state')
+      // Only clear editor state if we're actually leaving the editor
+      // (not just from the interval cleanup)
+      if (engineRef.current && engineRef.current.isDisposed()) {
+        localStorage.removeItem('editor_plant_state')
+      }
     }
-  }, [plotIndex]) // Add plotIndex to dependencies
+  }, [plotIndex])
 
   // Handle property updates
   const handlePropertyChange = (id: string, updates: Partial<EditableProperties>) => {
