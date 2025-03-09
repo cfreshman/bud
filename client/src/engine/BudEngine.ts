@@ -138,6 +138,11 @@ export class BudEngine extends EngineUtils {
       0.1, 10
     )
     this.uiCamera.position.z = 1
+
+    // Add grid helper
+    const gridHelper = new THREE.GridHelper(10, 20, '#cccccc', '#888888')
+    gridHelper.position.y = 0
+    this.scene.add(gridHelper)
     
     // Remove existing ground plane and add pot and dirt instead
     this.setupPotAndDirt()
@@ -194,7 +199,7 @@ export class BudEngine extends EngineUtils {
       ['flower', '#ffdd88'] // Brighter purple
     ]
 
-    const radius = 2 // Distance from center
+    const radius = 1 // Distance from center
     const startAngle = Math.PI / 4
     const angleStep = Math.PI / 6 // 30 degrees between pots
 
