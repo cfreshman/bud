@@ -1596,11 +1596,28 @@ export class BudEngine extends EngineUtils {
       position: params.worldPosition.clone(),
       length: params.length || 0.3,
       width: params.width || 0.05,
-      isHead: params.isHead
+      isHead: false // Never set head on first bone
     })
     
     // Add bone to part's sequence
     part.boneIds.push(boneId)
+    
+    // If this is the first stem, add a second bone with the head
+    if (params.type === 'stem' && !Array.from(this.parts.values()).some(p => 
+      p.type === 'stem' && p.boneIds.some(bid => {
+        const bone = this.bones.get(bid)
+        return bone?.isHead
+      })
+    )) {
+      const headBoneId = this.addBone({
+        partId: id,
+        position: new THREE.Vector3(), // Position will be set by transform
+        length: params.length || 0.3,
+        width: params.width || 0.05,
+        isHead: true
+      })
+      part.boneIds.push(headBoneId)
+    }
     
     // Log before storing
     console.log('BudEngine: Before storing part', {
@@ -1649,7 +1666,12 @@ export class BudEngine extends EngineUtils {
     adjustedPosition.y = this.plantingArea.y
 
     // Make the first stem created a head
-    const isFirstStem = params.type === 'stem' && this.parts.size === 0
+    const isFirstStem = params.type === 'stem' && !Array.from(this.parts.values()).some(p => 
+      p.type === 'stem' && p.boneIds.some(bid => {
+        const bone = this.bones.get(bid)
+        return bone?.isHead
+      })
+    )
 
     // Create part at the adjusted position
     const partId = this.addPart({
@@ -2244,6 +2266,12 @@ export class BudEngine extends EngineUtils {
       const partToDelete = this.parts.get(partIdToDelete)
       if (!partToDelete) continue
 
+      // Check if we're deleting a stem with a head
+      const hasHead = partToDelete.type === 'stem' && partToDelete.boneIds.some(boneId => {
+        const bone = this.bones.get(boneId)
+        return bone?.isHead
+      })
+
       // Delete all bones for this part
       for (const boneId of partToDelete.boneIds) {
         this.bones.delete(boneId)
@@ -2262,6 +2290,22 @@ export class BudEngine extends EngineUtils {
       for (const [bodyId, body] of this.bodies.entries()) {
         if (body.rootPartId === partIdToDelete) {
           this.bodies.delete(bodyId)
+        }
+      }
+
+      // If we deleted a stem with a head, make the oldest remaining stem a head
+      if (hasHead) {
+        const oldestStem = Array.from(this.parts.values())
+          .filter(p => p.type === 'stem')
+          .sort((a, b) => a.id.localeCompare(b.id))[0]
+
+        if (oldestStem && oldestStem.boneIds.length > 0) {
+          // Get the last bone of the stem
+          const lastBoneId = oldestStem.boneIds[oldestStem.boneIds.length - 1]
+          const lastBone = this.bones.get(lastBoneId)
+          if (lastBone) {
+            lastBone.isHead = true
+          }
         }
       }
     }
