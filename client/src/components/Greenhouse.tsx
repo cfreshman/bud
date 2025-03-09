@@ -33,53 +33,19 @@ export function Greenhouse({ plants, onSelectPlot }: GreenhouseProps) {
     setMenuState({ position, plotIndex })
   }, [plants])
 
-  useEffect(() => {
+  // Initialize or reinitialize the ViewEngine
+  const initializeEngine = useCallback(() => {
     if (!containerRef.current) return
     
-    // Only create engine if it doesn't exist
-    if (!engineRef.current) {
-      engineRef.current = new ViewEngine(containerRef.current, handlePlotClick)
-
-      // Load initial plants from localStorage
-      for (let i = 0; i < 6; i++) {
-        try {
-          const savedPlantStr = localStorage.getItem(`greenhouse_plot_${i}`)
-          if (savedPlantStr) {
-            const plantData = deserializePlantData(savedPlantStr)
-            engineRef.current.setPlantInPlot(i, plantData)
-          }
-        } catch (error) {
-          console.error(`Failed to load plot ${i}:`, error)
-        }
-      }
+    // Dispose of existing engine if there is one
+    if (engineRef.current && !engineRef.current.isDisposed()) {
+      engineRef.current.dispose()
     }
+    
+    // Create new engine
+    engineRef.current = new ViewEngine(containerRef.current, handlePlotClick)
 
-    return () => {
-      // Prevent double cleanup in React dev mode
-      if (cleanupRef.current) return
-      cleanupRef.current = true
-
-      // Only dispose if engine exists and hasn't been disposed
-      if (engineRef.current && !engineRef.current.isDisposed()) {
-        try {
-          engineRef.current.dispose()
-        } catch (error) {
-          console.warn('Error during ViewEngine disposal:', error)
-        }
-        engineRef.current = null
-      }
-    }
-  }, [handlePlotClick])
-
-  // Update plants in plots when they change
-  useEffect(() => {
-    if (!engineRef.current) return
-
-    // Clear all plots first
-    for (let i = 0; i < 6; i++) {
-      engineRef.current.setPlantInPlot(i, undefined)
-    }
-
+    // Load plants into plots
     // First try to load from localStorage
     for (let i = 0; i < 6; i++) {
       try {
@@ -97,14 +63,44 @@ export function Greenhouse({ plants, onSelectPlot }: GreenhouseProps) {
     plants.forEach((plantData, plotIndex) => {
       engineRef.current?.setPlantInPlot(plotIndex, plantData)
     })
-  }, [plants])
+  }, [handlePlotClick, plants])
+
+  // Initialize engine on mount
+  useEffect(() => {
+    initializeEngine()
+    
+    return () => {
+      // Prevent double cleanup in React dev mode
+      if (cleanupRef.current) return
+      cleanupRef.current = true
+
+      // Only dispose if engine exists and hasn't been disposed
+      if (engineRef.current && !engineRef.current.isDisposed()) {
+        try {
+          engineRef.current.dispose()
+        } catch (error) {
+          console.warn('Error during ViewEngine disposal:', error)
+        }
+        engineRef.current = null
+      }
+    }
+  }, [initializeEngine])
+
+  // Reinitialize engine when returning from chat
+  const handleChatClose = useCallback(() => {
+    setChatState(null)
+    // Use setTimeout to ensure the DOM is ready before reinitializing
+    setTimeout(() => {
+      initializeEngine()
+    }, 0)
+  }, [initializeEngine])
 
   // Show ChatView when chatState is set
   if (chatState) {
     return (
       <ChatView 
         plant={chatState.plant}
-        onClose={() => setChatState(null)}
+        onClose={handleChatClose}
       />
     )
   }

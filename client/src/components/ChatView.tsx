@@ -106,28 +106,30 @@ export function ChatView({ plant, onClose }: ChatViewProps) {
 
       {/* History overlay */}
       <div className={`chat-history-overlay ${showHistory ? 'visible' : ''}`}>
-        <div className="chat-history-header">
-          <h3>conversation history</h3>
-          <button 
-            className="chat-history-close"
-            onClick={() => setShowHistory(false)}
-          >
-            ×
-          </button>
-        </div>
-        <div className="chat-history-messages">
-          {messages.map(msg => (
-            <div key={msg.id} className={`chat-message ${msg.sender}`}>
-              <div className="chat-message-content">
-                {msg.content}
+        <div className="chat-history-modal">
+          <div className="chat-history-header">
+            <h3>conversation history</h3>
+            <button 
+              className="chat-history-close"
+              onClick={() => setShowHistory(false)}
+            >
+              ×
+            </button>
+          </div>
+          <div className="chat-history-messages">
+            {messages.map(msg => (
+              <div key={msg.id} className={`chat-message ${msg.sender}`}>
+                <div className="chat-message-content">
+                  {msg.content}
+                </div>
               </div>
-            </div>
-          ))}
-          {messages.length === 0 && (
-            <div className="chat-empty-message">
-              no messages yet
-            </div>
-          )}
+            ))}
+            {messages.length === 0 && (
+              <div className="chat-empty-message">
+                no messages yet
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>

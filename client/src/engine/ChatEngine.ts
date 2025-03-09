@@ -56,7 +56,7 @@ export class ChatEngine extends EngineUtils {
     this.scene.add(ground)
 
     // Add pot
-    const potGeo = new THREE.CylinderGeometry(0.4, 0.3, 0.4, 32)
+    const potGeo = new THREE.CylinderGeometry(0.6, 0.4, 0.4, 32)
     const potMat = new THREE.MeshStandardMaterial({ 
       color: '#8B5E3C',
       roughness: 0.6,
@@ -69,7 +69,7 @@ export class ChatEngine extends EngineUtils {
     this.scene.add(pot)
 
     // Add dirt
-    const dirtGeo = new THREE.SphereGeometry(0.35, 32, 16)
+    const dirtGeo = new THREE.SphereGeometry(0.55, 32, 16)
     const dirtMat = new THREE.MeshStandardMaterial({
       color: '#5C4033',
       roughness: 0.8,
@@ -103,10 +103,13 @@ export class ChatEngine extends EngineUtils {
     this.bodies = new Map(data.bodies);
     this.roots = new Set(data.roots);
     
-    // Place plant at center of scene
+    // Place plant at center of scene, properly positioned in the pot
     const body = Array.from(this.bodies.values())[0];
     if (body) {
-      const offsetPosition = new THREE.Vector3(0, 0.4, 0);
+      // Position the plant at the center of the pot, at the correct height
+      const offsetPosition = new THREE.Vector3(0, 0.45, 0);
+      
+      // Create a transform matrix for the body
       const transform = new THREE.Matrix4().makeBasis(
         body.transform.right,
         body.transform.up, 
@@ -114,7 +117,10 @@ export class ChatEngine extends EngineUtils {
       );
       transform.setPosition(offsetPosition);
       
-      // Render the plant at this position
+      // Update the body's transform with the new position
+      body.transform.position.copy(offsetPosition);
+      
+      // Render the plant
       this.renderPlant(data);
     }
   }
@@ -165,7 +171,7 @@ export class ChatEngine extends EngineUtils {
     // Get screen position
     const position = new THREE.Vector3()
     position.setFromMatrixPosition(transform)
-    position.y += headBone.length // Position above head
+    position.y += headBone.length * 1.5 // Position higher above head
 
     // Project to screen coordinates
     const screenPosition = position.clone()
@@ -175,43 +181,18 @@ export class ChatEngine extends EngineUtils {
     const x = (screenPosition.x + 1) * this.domElement.clientWidth / 2
     const y = (-screenPosition.y + 1) * this.domElement.clientHeight / 2
 
-    // Create container for speech bubble
-    const bubbleContainer = document.createElement('div')
-    bubbleContainer.className = 'chat-bubble-container'
-    bubbleContainer.style.left = `${x}px`
-    bubbleContainer.style.top = `${y}px`
-    bubbleContainer.style.transform = 'translate(-50%, -100%)'
-
-    // Create speech bubble rectangle
+    // Create speech bubble (no triangle stem)
     const bubble = document.createElement('div')
     bubble.className = 'chat-bubble'
+    bubble.style.position = 'absolute'
+    bubble.style.left = `${x}px`
+    bubble.style.top = `${y}px`
+    bubble.style.transform = 'translate(-50%, -150%)' // Move it higher
     bubble.textContent = text
-    
-    // Create triangle stem
-    const stem = document.createElement('div')
-    stem.className = 'chat-bubble-stem'
-    
-    // Create inner triangle to create the outline effect
-    const innerStem = document.createElement('div')
-    innerStem.className = 'chat-bubble-stem-inner'
-    
-    stem.appendChild(innerStem)
-    
-    // Assemble bubble
-    bubbleContainer.appendChild(bubble)
-    bubbleContainer.appendChild(stem)
-    this.domElement.appendChild(bubbleContainer)
+    this.domElement.appendChild(bubble)
 
-    // Fade in
-    requestAnimationFrame(() => {
-      bubbleContainer.style.opacity = '1'
-    })
-
-    // Remove after delay
-    setTimeout(() => {
-      bubbleContainer.style.opacity = '0'
-      setTimeout(() => bubbleContainer.remove(), 200)
-    }, 5000)
+    // Make visible immediately
+    bubble.style.opacity = '1'
   }
 
   protected override animate() {
