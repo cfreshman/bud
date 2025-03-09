@@ -842,7 +842,7 @@ export class BudEngine extends EngineUtils {
       mesh.userData.parentPartIds = Array.from(currentParentIds)
 
       // Add inner bone for stems
-      const isSelectedPart = this.activePartId === part.id
+      const isSelectedPart = this.selectedBoneId && part.boneIds.includes(this.selectedBoneId)
       if (part.type === 'stem' && isSelectedPart) {
         // Create inner bone geometry - slightly smaller than outer bone
         const innerGeo = new THREE.CylinderGeometry(
