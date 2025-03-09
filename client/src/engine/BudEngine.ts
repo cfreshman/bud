@@ -238,11 +238,12 @@ export class BudEngine extends EngineUtils {
         stemGeo.translate(0, params.length / 2, 0)
         return stemGeo
       case 'leaf':
-        const radius = params.length * 2 / 7
+        const radius = params.width * 2
         const leafGeo = new THREE.CylinderGeometry(radius, radius, 0.01, 16, 1, false)
         leafGeo.rotateX(Math.PI / 2) // Rotate to be vertical
-        leafGeo.scale(1, 2, 1) // Scale Y to make it oval
-        leafGeo.translate(0, radius * 2, 0) // Adjust translation for new height
+        const scale = params.length * .8 / radius
+        leafGeo.scale(1, scale, 1) // Scale Y to make it oval
+        leafGeo.translate(0, params.length * .8, 0) // Adjust translation for new height
         return leafGeo
       case 'thorn':
         const length = params.length / 2
@@ -267,7 +268,7 @@ export class BudEngine extends EngineUtils {
       color,
       roughness: 0.7,
       metalness: 0.2,
-      side: type === 'leaf' ? THREE.DoubleSide : THREE.FrontSide // Make leaves visible from both sides
+      side: THREE.FrontSide
     })
 
     const mesh = new THREE.Mesh(geometry, material)

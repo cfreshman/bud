@@ -112,9 +112,6 @@ export function Editor({ plantData, onSave, onCancel, onDelete }: EditorProps) {
   const handleDeletePart = (id: string) => {
     if (!engineRef.current) return
     engineRef.current.deletePart(id)
-    
-    const updatedPlantData = engineRef.current.getPlantData()
-    onSave(updatedPlantData)
   }
 
   // Handle part cloning
