@@ -144,6 +144,18 @@ export class BudEngine extends EngineUtils {
     gridHelper.position.y = 0
     this.scene.add(gridHelper)
     
+    // Add invisible ground plane for dragging
+    const groundGeo = new THREE.PlaneGeometry(10, 10)
+    const groundMat = new THREE.MeshBasicMaterial({ 
+      visible: false,
+      side: THREE.DoubleSide
+    })
+    this.groundPlane = new THREE.Mesh(groundGeo, groundMat)
+    this.groundPlane.rotation.x = -Math.PI / 2
+    this.groundPlane.position.y = 0
+    this.groundPlane.userData.isGround = true
+    this.scene.add(this.groundPlane)
+    
     // Remove existing ground plane and add pot and dirt instead
     this.setupPotAndDirt()
     
