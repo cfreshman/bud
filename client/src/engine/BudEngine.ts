@@ -1596,28 +1596,11 @@ export class BudEngine extends EngineUtils {
       position: params.worldPosition.clone(),
       length: params.length || 0.3,
       width: params.width || 0.05,
-      isHead: false // Never set head on first bone
+      isHead: params.isHead
     })
     
     // Add bone to part's sequence
     part.boneIds.push(boneId)
-    
-    // If this is the first stem, add a second bone with the head
-    if (params.type === 'stem' && !Array.from(this.parts.values()).some(p => 
-      p.type === 'stem' && p.boneIds.some(bid => {
-        const bone = this.bones.get(bid)
-        return bone?.isHead
-      })
-    )) {
-      const headBoneId = this.addBone({
-        partId: id,
-        position: new THREE.Vector3(), // Position will be set by transform
-        length: params.length || 0.3,
-        width: params.width || 0.05,
-        isHead: true
-      })
-      part.boneIds.push(headBoneId)
-    }
     
     // Log before storing
     console.log('BudEngine: Before storing part', {
