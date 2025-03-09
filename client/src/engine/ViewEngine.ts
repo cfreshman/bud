@@ -6,10 +6,13 @@ export class ViewEngine extends EngineUtils {
   private plots: THREE.Group[] = []
   private selectedPlot: number = -1
   private onSelectPlot: (plotIndex: number) => void
-  private activePlots: Map<number, PlantData> = new Map()
+  private activePlots = new Map<number, PlantData>()
   private mouseDown = false
   private isDragging = false
   private dragStartPosition = new THREE.Vector3()
+  private boundMouseDown: (event: MouseEvent) => void = () => {}
+  private boundMouseMove: (event: MouseEvent) => void = () => {}
+  private boundMouseUp: () => void = () => {}
 
   constructor(container: HTMLElement, onSelectPlot: (plotIndex: number) => void) {
     super(container)
@@ -158,9 +161,14 @@ export class ViewEngine extends EngineUtils {
       this.isDragging = false
     }
 
-    this.domElement.addEventListener('mousedown', onMouseDown)
-    this.domElement.addEventListener('mousemove', onMouseMove)
-    this.domElement.addEventListener('mouseup', onMouseUp)
+    // Store bound functions for removal later
+    this.boundMouseDown = onMouseDown.bind(this)
+    this.boundMouseMove = onMouseMove.bind(this)
+    this.boundMouseUp = onMouseUp.bind(this)
+
+    this.domElement.addEventListener('mousedown', this.boundMouseDown)
+    this.domElement.addEventListener('mousemove', this.boundMouseMove)
+    this.domElement.addEventListener('mouseup', this.boundMouseUp)
   }
 
   private highlightPlot(index: number, highlight: boolean) {
@@ -177,36 +185,46 @@ export class ViewEngine extends EngineUtils {
       if (!plot) return
 
       // Store the original data without plot offset
-      this.activePlots.set(plotIndex, plantData)
-
-      // Clone the plant data and add plot offset for rendering
-      const clonedData: PlantData = {
+      this.activePlots.set(plotIndex, {
         parts: new Map(plantData.parts),
         bones: new Map(plantData.bones),
-        bodies: new Map(),
+        bodies: new Map(plantData.bodies),
         roots: new Set(plantData.roots)
-      }
+      })
 
-      // Clone and offset each body
-      for (const [id, body] of plantData.bodies) {
-        clonedData.bodies.set(id, {
-          id: body.id,
-          rootPartId: body.rootPartId,
-          transform: {
-            position: body.transform.position.clone().add(plot.position),
-            up: body.transform.up.clone(),
-            right: body.transform.right.clone(),
-            forward: body.transform.forward.clone()
-          }
-        })
-      }
-      
-      // Render with offset positions
-      this.renderPlant(clonedData)
+      // Create offset version for initial render
+      const offsetData = this.createOffsetPlantData(plantData, plot.position)
+      this.renderPlant(offsetData)
     } else {
       // Clear from active plots
       this.activePlots.delete(plotIndex)
     }
+  }
+
+  private createOffsetPlantData(plantData: PlantData, plotOffset: THREE.Vector3): PlantData {
+    // Create deep clone of plant data
+    const offsetData: PlantData = {
+      parts: new Map(plantData.parts),
+      bones: new Map(plantData.bones),
+      bodies: new Map(),
+      roots: new Set(plantData.roots)
+    }
+
+    // Add plot offset to each body
+    for (const [id, body] of plantData.bodies) {
+      offsetData.bodies.set(id, {
+        id: body.id,
+        rootPartId: body.rootPartId,
+        transform: {
+          position: body.transform.position.clone().add(plotOffset),
+          up: body.transform.up.clone(),
+          right: body.transform.right.clone(),
+          forward: body.transform.forward.clone()
+        }
+      })
+    }
+
+    return offsetData
   }
   
   getPlantFromPlot(plotIndex: number): PlantData | undefined {
@@ -219,69 +237,61 @@ export class ViewEngine extends EngineUtils {
   }
 
   override dispose() {
-    // Remove event listeners
-    this.domElement.removeEventListener('mousedown', () => {})
-    this.domElement.removeEventListener('mousemove', () => {})
-    this.domElement.removeEventListener('mouseup', () => {})
+    // Remove event listeners with proper bound functions
+    if (this.boundMouseDown) this.domElement.removeEventListener('mousedown', this.boundMouseDown)
+    if (this.boundMouseMove) this.domElement.removeEventListener('mousemove', this.boundMouseMove)
+    if (this.boundMouseUp) this.domElement.removeEventListener('mouseup', this.boundMouseUp)
+    
+    // Call parent dispose first
+    super.dispose()
     
     // Clear all plots
     this.plots = []
-    
-    // Call parent dispose
-    super.dispose()
   }
 
-  override animate = () => {
-    requestAnimationFrame(this.animate)
-    this.controls.update()
-
-    // Clear all groups at start of frame
-    const groupsToRemove = this.scene.children.filter(child => 
-      child instanceof THREE.Group && child.userData.bodyId !== undefined
-    )
+  protected override animate() {
+    if (this.isDisposed() || this.isDisposing) return
     
-    groupsToRemove.forEach(group => {
-      this.scene.remove(group)
-      group.traverse(child => {
-        if (child instanceof THREE.Mesh) {
-          child.geometry.dispose()
-          if (child.material instanceof THREE.Material) {
-            child.material.dispose()
-          }
-        }
-      })
-    })
+    this.animationFrameId = requestAnimationFrame(() => this.animate())
+    if (!this.scene || !this.renderer || !this.composer) return
+    
+    this.controls?.update()
 
-    // Re-render all active plants with their plot offsets
-    for (const [plotIndex, plantData] of this.activePlots.entries()) {
-      const plot = this.plots[plotIndex]
-      if (!plot) continue
-
-      // Create offset version for rendering
-      const offsetData: PlantData = {
-        parts: new Map(plantData.parts),
-        bones: new Map(plantData.bones),
-        bodies: new Map(),
-        roots: new Set(plantData.roots)
-      }
-
-      // Add plot offset to each body
-      for (const [id, body] of plantData.bodies) {
-        offsetData.bodies.set(id, {
-          id: body.id,
-          rootPartId: body.rootPartId,
-          transform: {
-            position: body.transform.position.clone().add(plot.position),
-            up: body.transform.up.clone(),
-            right: body.transform.right.clone(),
-            forward: body.transform.forward.clone()
-          }
+    try {
+      // Re-render all active plants with their plot offsets
+      if (this.activePlots && this.activePlots.size > 0) {
+        // Clear only plant meshes at start of frame
+        const groupsToRemove = this.scene.children.filter(child => 
+          child instanceof THREE.Group && child.userData.bodyId !== undefined
+        )
+        
+        groupsToRemove.forEach(group => {
+          if (!group || !this.scene) return
+          this.scene.remove(group)
+          group.traverse(child => {
+            if (child instanceof THREE.Mesh) {
+              child.geometry?.dispose()
+              if (child.material instanceof THREE.Material) {
+                child.material.dispose()
+              }
+            }
+          })
         })
+
+        // Re-render each plant in its plot
+        for (const [plotIndex, plantData] of this.activePlots.entries()) {
+          const plot = this.plots[plotIndex]
+          if (!plot) continue
+
+          // Create offset version for rendering
+          const offsetData = this.createOffsetPlantData(plantData, plot.position)
+          this.renderPlant(offsetData)
+        }
       }
 
-      this.renderPlant(offsetData)
+      this.composer?.render()
+    } catch (error) {
+      console.error('Error in ViewEngine animation loop:', error)
     }
-
-    this.composer.render()
   }
 } 

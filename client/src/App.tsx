@@ -8,8 +8,13 @@ import './App.css'
 
 function App() {
   const [selectedPlot, setSelectedPlot] = useState<number | null>(null)
-  const [plants, setPlants] = useState<Map<number, PlantData>>(() => {
-    // Initialize plants from localStorage on mount
+  const [plants, setPlants] = useState<Map<number, PlantData>>(new Map())
+  const [isEditing, setIsEditing] = useState(false)
+  const [activeEditingPlant, setActiveEditingPlant] = useState<PlantData | undefined>()
+  const viewEngineRef = useRef<ViewEngine | null>(null)
+
+  // Load plants from localStorage on mount
+  useEffect(() => {
     try {
       const savedPlants = new Map<number, PlantData>()
       for (let i = 0; i < 6; i++) {
@@ -23,72 +28,26 @@ function App() {
           }
         }
       }
-      console.log('Initializing plants state with:', savedPlants.size, 'plants')
-      return savedPlants
-    } catch (error) {
-      console.error('Failed to initialize plants:', error)
-      return new Map()
-    }
-  })
-  const [isEditing, setIsEditing] = useState(false)
-  const [activeEditingPlant, setActiveEditingPlant] = useState<PlantData | undefined>()
-  const viewEngineRef = useRef<ViewEngine | null>(null)
+      console.log('Loading plants from localStorage:', savedPlants.size, 'plants')
+      setPlants(savedPlants)
 
-  // Load saved state on mount
-  useEffect(() => {
-    try {
-      // Load active editing state
-      const activeEditingStr = localStorage.getItem('active_editing_state')
-      if (activeEditingStr) {
-        const activeState = JSON.parse(activeEditingStr)
-        setSelectedPlot(activeState.selectedPlot)
-        setIsEditing(activeState.isEditing)
-        if (activeState.plantData) {
-          try {
-            const plantData = deserializePlantData(activeState.plantData)
-            setActiveEditingPlant(plantData)
-          } catch (error) {
-            console.error('Failed to load active editing plant:', error)
-          }
+      // Load active editing state if it exists
+      const editorStateStr = localStorage.getItem('editor_plant_state')
+      if (editorStateStr) {
+        try {
+          const editorState = JSON.parse(editorStateStr)
+          const plantData = deserializePlantData(editorState.plantData)
+          setSelectedPlot(editorState.plotIndex)
+          setIsEditing(true)
+          setActiveEditingPlant(plantData)
+        } catch (error) {
+          console.error('Failed to load active editing state:', error)
         }
       }
     } catch (error) {
-      console.error('Failed to load saved state:', error)
+      console.error('Failed to load plants:', error)
     }
   }, [])
-
-  // Save plants whenever they change
-  useEffect(() => {
-    try {
-      console.log('Saving plants, count:', plants.size, 'plants:', Array.from(plants.keys()))
-      
-      // Save each occupied plot
-      for (const [plotIndex, plantData] of plants.entries()) {
-        try {
-          const serialized = serializePlantData(plantData)
-          console.log(`Saving plot ${plotIndex}:`, {
-            parts: plantData.parts.size,
-            bones: plantData.bones.size,
-            bodies: plantData.bodies.size,
-            roots: plantData.roots.size,
-            serializedLength: serialized.length
-          })
-          localStorage.setItem(`greenhouse_plot_${plotIndex}`, serialized)
-        } catch (error) {
-          console.error(`Failed to save plot ${plotIndex}:`, error)
-        }
-      }
-
-      // Clear empty plots
-      for (let i = 0; i < 6; i++) {
-        if (!plants.has(i)) {
-          localStorage.removeItem(`greenhouse_plot_${i}`)
-        }
-      }
-    } catch (error) {
-      console.error('Failed to save plants:', error)
-    }
-  }, [plants])
 
   // Save active editing state whenever it changes
   useEffect(() => {
@@ -134,18 +93,52 @@ function App() {
       roots: plantData.roots.size
     })
 
-    // Update plants Map
-    const newPlants = new Map(plants)
-    newPlants.set(selectedPlot, plantData)
-    setPlants(newPlants)
-    
-    // Clear editing state
-    setSelectedPlot(null)
-    setIsEditing(false)
-    setActiveEditingPlant(undefined)
+    try {
+      // Save to localStorage first
+      const serialized = serializePlantData(plantData)
+      localStorage.setItem(`greenhouse_plot_${selectedPlot}`, serialized)
+
+      // Reload all plants from localStorage to ensure consistency
+      const savedPlants = new Map<number, PlantData>()
+      for (let i = 0; i < 6; i++) {
+        const savedPlantStr = localStorage.getItem(`greenhouse_plot_${i}`)
+        if (savedPlantStr) {
+          try {
+            const plantData = deserializePlantData(savedPlantStr)
+            savedPlants.set(i, plantData)
+          } catch (error) {
+            console.error(`Failed to load plot ${i}:`, error)
+          }
+        }
+      }
+      setPlants(savedPlants)
+      
+      // Clear editing state
+      setSelectedPlot(null)
+      setIsEditing(false)
+      setActiveEditingPlant(undefined)
+    } catch (error) {
+      console.error('Failed to save plant:', error)
+    }
   }
 
   const handleCancelEdit = () => {
+    // Reload the original plant data from localStorage
+    if (selectedPlot !== null) {
+      try {
+        const savedPlantStr = localStorage.getItem(`greenhouse_plot_${selectedPlot}`)
+        if (savedPlantStr) {
+          const plantData = deserializePlantData(savedPlantStr)
+          const newPlants = new Map(plants)
+          newPlants.set(selectedPlot, plantData)
+          setPlants(newPlants)
+        }
+      } catch (error) {
+        console.error('Failed to reload plant:', error)
+      }
+    }
+    
+    // Clear editing state
     setSelectedPlot(null)
     setIsEditing(false)
     setActiveEditingPlant(undefined)
@@ -154,15 +147,22 @@ function App() {
   const handleDeletePlant = () => {
     if (selectedPlot === null) return
     
-    // Remove from plants Map
-    const newPlants = new Map(plants)
-    newPlants.delete(selectedPlot)
-    setPlants(newPlants)
-    
-    // Clear editing state
-    setSelectedPlot(null)
-    setIsEditing(false)
-    setActiveEditingPlant(undefined)
+    try {
+      // Remove from localStorage first
+      localStorage.removeItem(`greenhouse_plot_${selectedPlot}`)
+      
+      // Then remove from plants Map
+      const newPlants = new Map(plants)
+      newPlants.delete(selectedPlot)
+      setPlants(newPlants)
+      
+      // Clear editing state
+      setSelectedPlot(null)
+      setIsEditing(false)
+      setActiveEditingPlant(undefined)
+    } catch (error) {
+      console.error('Failed to delete plant:', error)
+    }
   }
 
   return (
@@ -171,6 +171,7 @@ function App() {
         {isEditing ? (
           <Editor 
             plantData={activeEditingPlant}
+            plotIndex={selectedPlot || 0}
             onSave={handleSavePlant}
             onCancel={handleCancelEdit}
             onDelete={handleDeletePlant}

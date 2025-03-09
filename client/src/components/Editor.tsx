@@ -7,14 +7,16 @@ import { serializePlantData, deserializePlantData } from '../utils/plantSaveUtil
 
 interface EditorProps {
   plantData?: PlantData
+  plotIndex: number
   onSave: (plantData: PlantData) => void
   onCancel: () => void
   onDelete: () => void
 }
 
-export function Editor({ plantData, onSave, onCancel, onDelete }: EditorProps) {
+export function Editor({ plantData, plotIndex, onSave, onCancel, onDelete }: EditorProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const engineRef = useRef<BudEngine | null>(null)
+  const cleanupRef = useRef(false)
   const [selectedPart, setSelectedPart] = useState<EditableProperties | null>(null)
   
   useEffect(() => {
@@ -41,48 +43,54 @@ export function Editor({ plantData, onSave, onCancel, onDelete }: EditorProps) {
       })
     }
 
-    // Load plant data if provided
-    if (plantData) {
+    // Always set the provided plant data when it changes
+    if (engineRef.current && plantData) {
       engineRef.current.setPlantData(plantData)
     }
 
     return () => {
-      engineRef.current?.dispose()
-      engineRef.current = null
+      // Prevent double cleanup in React dev mode
+      if (cleanupRef.current) return
+      cleanupRef.current = true
+
+      // Only dispose if engine exists and hasn't been disposed
+      if (engineRef.current && !engineRef.current.isDisposed()) {
+        try {
+          engineRef.current.dispose()
+        } catch (error) {
+          console.warn('Error during BudEngine disposal:', error)
+        }
+        engineRef.current = null
+      }
     }
-  }, [])
+  }, [plantData]) // Depend on plantData to update when it changes
 
   // Auto-save engine state whenever it changes
   useEffect(() => {
     const saveEngineState = () => {
-      if (engineRef.current) {
+      if (engineRef.current && !engineRef.current.isDisposed()) {
         const currentState = engineRef.current.getPlantData()
-        localStorage.setItem('editor_plant_state', serializePlantData(currentState))
+        const editorState = {
+          plotIndex,
+          plantData: serializePlantData(currentState)
+        }
+        localStorage.setItem('editor_plant_state', JSON.stringify(editorState))
       }
     }
 
     // Save every second if engine exists
     const interval = setInterval(saveEngineState, 1000)
 
-    return () => clearInterval(interval)
-  }, [])
-
-  // Load saved engine state on mount
-  useEffect(() => {
-    const savedState = localStorage.getItem('editor_plant_state')
-    if (savedState && engineRef.current) {
-      try {
-        const state = deserializePlantData(savedState)
-        engineRef.current.setPlantData(state)
-      } catch (error) {
-        console.error('Failed to load editor state:', error)
-      }
+    return () => {
+      clearInterval(interval)
+      // Clear editor state when unmounting
+      localStorage.removeItem('editor_plant_state')
     }
-  }, [])
+  }, [plotIndex]) // Add plotIndex to dependencies
 
   // Handle property updates
   const handlePropertyChange = (id: string, updates: Partial<EditableProperties>) => {
-    if (!engineRef.current) return
+    if (!engineRef.current || engineRef.current.isDisposed()) return
 
     // Update the engine
     engineRef.current.updateProperties(id, updates)
@@ -98,56 +106,59 @@ export function Editor({ plantData, onSave, onCancel, onDelete }: EditorProps) {
 
   // Handle stem growth
   const handleGrowStem = (id: string) => {
-    if (!engineRef.current) return
+    if (!engineRef.current || engineRef.current.isDisposed()) return
     engineRef.current.growStemPart(id)
   }
 
   // Handle stem shrink
   const handleShrinkStem = (id: string) => {
-    if (!engineRef.current) return
+    if (!engineRef.current || engineRef.current.isDisposed()) return
     engineRef.current.shrinkStemPart(id)
   }
 
   // Handle part deletion
   const handleDeletePart = (id: string) => {
-    if (!engineRef.current) return
+    if (!engineRef.current || engineRef.current.isDisposed()) return
     engineRef.current.deletePart(id)
   }
 
   // Handle part cloning
   const handleClonePart = (id: string) => {
-    if (!engineRef.current) return
+    if (!engineRef.current || engineRef.current.isDisposed()) return
     engineRef.current.clonePart(id)
   }
 
   // Handle applying properties to all parts of same type
   const handleApplyToAll = (id: string) => {
-    if (!engineRef.current) return
+    if (!engineRef.current || engineRef.current.isDisposed()) return
     engineRef.current.applyPropertiesToAllOfType(id)
   }
 
   // Handle fitting camera to plant
   const handleFitView = () => {
-    if (!engineRef.current) return
+    if (!engineRef.current || engineRef.current.isDisposed()) return
     engineRef.current.fitCameraToPlant()
   }
 
   // Handle final save
   const handleSave = () => {
-    if (!engineRef.current) return
+    if (!engineRef.current || engineRef.current.isDisposed()) return
     const plantData = engineRef.current.getPlantData()
-    onSave(plantData)
+    // Clear editor state before saving to greenhouse
     localStorage.removeItem('editor_plant_state')
+    onSave(plantData)
   }
 
   // Handle cancel
   const handleCancel = () => {
+    // Clear editor state before returning to greenhouse
     localStorage.removeItem('editor_plant_state')
     onCancel()
   }
 
   // Handle delete
   const handleEditorDelete = () => {
+    // Clear editor state before deleting
     localStorage.removeItem('editor_plant_state')
     onDelete()
   }

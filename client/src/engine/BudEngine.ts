@@ -167,10 +167,30 @@ export class BudEngine extends EngineUtils {
     this.renderer.domElement.addEventListener('mousemove', this.onMouseMove.bind(this))
     this.renderer.domElement.addEventListener('mouseup', this.onMouseUp.bind(this))
     
-    // Start render loop
-    requestAnimationFrame(() => {
-      this.fitCameraToPlant() // Add camera fit after loading saved state
-    })
+    // Fit camera after a short delay to ensure everything is loaded
+    setTimeout(() => {
+      this.fitCameraToPlant()
+    }, 100)
+  }
+
+  override dispose() {
+    // Remove event listeners first
+    if (this.renderer?.domElement) {
+      this.renderer.domElement.removeEventListener('mousedown', this.onMouseDown.bind(this))
+      this.renderer.domElement.removeEventListener('mousemove', this.onMouseMove.bind(this))
+      this.renderer.domElement.removeEventListener('mouseup', this.onMouseUp.bind(this))
+    }
+
+    // Clear all UI elements and special objects
+    this.partPreviews = []
+    this.partPots.clear()
+    this.partMeshes.clear()
+    this.mainPot = undefined
+    this.mainDirt = undefined
+    this._eventListeners.clear()
+
+    // Call parent dispose to handle the rest
+    super.dispose()
   }
 
   protected setupPotAndDirt() {
@@ -554,83 +574,93 @@ export class BudEngine extends EngineUtils {
     this.outlinePass.resolution.set(width, height)
   }
 
-  protected animate = () => {
-    requestAnimationFrame(this.animate)
-    this.controls.update()
+  protected override animate() {
+    if (this.isDisposed() || this.isDisposing) return
     
-    // Clear bone transforms and part IDs for this frame
-    this.boneTransforms.clear()
-    this.bonePartIds.clear()
+    this.animationFrameId = requestAnimationFrame(() => this.animate())
+    if (!this.scene || !this.renderer || !this.composer) return
     
-    // Store currently selected objects before cleanup
-    const selectedObjects = this.outlinePass.selectedObjects
+    this.controls?.update()
 
-    // Clear all groups at start of frame EXCEPT:
-    // 1. Non-group objects
-    // 2. Ground plane (isGround)
-    // 3. Part previews (isPartPreview)
-    // 4. Part pots and dirt
-    // 5. Debug spheres
-    const groupsToRemove = this.scene.children.filter(child => {
-      // remove toRemove
-      if (child.userData.toRemove) return true
-        
-      // Keep non-group objects
-      if (!(child instanceof THREE.Group)) {
-        // Keep ground plane, previews, and debug spheres
-        if (child.userData.isGround || child.userData.isPartPreview || child.userData.isDebug) return false
-        
-        // Keep main pot and dirt if they're meshes
-        if (child instanceof THREE.Mesh) {
-          if (child === this.mainPot || child === this.mainDirt) return false
-          
-          // Keep part pots and preview meshes
-          if (Array.from(this.partPots.values()).includes(child)) return false
-          if (Array.from(this.partMeshes.values()).includes(child)) return false
-        }
-        return false
-      }
+    try {
+      // Clear bone transforms and part IDs for this frame
+      this.boneTransforms?.clear()
+      this.bonePartIds?.clear()
       
-      // Remove if it has a bodyId (it's part of a plant that will be re-rendered)
-      return child.userData.bodyId !== undefined
-    })
-    
-    // Only remove the visual meshes, not the underlying data
-    groupsToRemove.forEach(group => {
-      this.scene.remove(group)
-      group.traverse(child => {
-        if (child instanceof THREE.Mesh) {
-          child.geometry.dispose()
-          if (child.material instanceof THREE.Material) {
-            child.material.dispose()
+      // Store currently selected objects before cleanup
+      const selectedObjects = this.outlinePass?.selectedObjects || []
+
+      // Clear all groups at start of frame EXCEPT:
+      // 1. Non-group objects
+      // 2. Ground plane (isGround)
+      // 3. Part previews (isPartPreview)
+      // 4. Part pots and dirt
+      // 5. Debug spheres
+      const groupsToRemove = this.scene.children.filter(child => {
+        if (!child) return false
+        // remove toRemove
+        if (child.userData.toRemove) return true
+          
+        // Keep non-group objects
+        if (!(child instanceof THREE.Group)) {
+          // Keep ground plane, previews, and debug spheres
+          if (child.userData.isGround || child.userData.isPartPreview || child.userData.isDebug) return false
+          
+          // Keep main pot and dirt if they're meshes
+          if (child instanceof THREE.Mesh) {
+            if (child === this.mainPot || child === this.mainDirt) return false
+            
+            // Keep part pots and preview meshes
+            if (Array.from(this.partPots.values()).includes(child)) return false
+            if (Array.from(this.partMeshes.values()).includes(child)) return false
           }
+          return false
+        }
+        
+        // Remove if it has a bodyId (it's part of a plant that will be re-rendered)
+        return child.userData.bodyId !== undefined
+      })
+      
+      // Only remove the visual meshes, not the underlying data
+      groupsToRemove.forEach(group => {
+        if (!group || !this.scene) return
+        this.scene.remove(group)
+        group.traverse(child => {
+          if (child instanceof THREE.Mesh) {
+            child.geometry?.dispose()
+            if (child.material instanceof THREE.Material) {
+              child.material.dispose()
+            }
+          }
+        })
+      })
+      
+      // Render all root parts
+      Array.from(this.roots).forEach(rootId => {
+        const body = Array.from(this.bodies.values())
+          .find(b => b.rootPartId === rootId)
+        if (body && body.transform.position.length() > 0) {
+          this.renderBody(body.id)
         }
       })
-    })
-    
-    // Render all root parts
-    Array.from(this.roots).forEach(rootId => {
-      const body = Array.from(this.bodies.values())
-        .find(b => b.rootPartId === rootId)
-      if (body && body.transform.position.length() > 0) {
-        this.renderBody(body.id)
-      }
-    })
 
-    // Restore outline selection if needed
-    if (selectedObjects.length > 0) {
-      // Find the new group for the selected part
-      const selectedPartId = selectedObjects[0].userData.partId
-      if (selectedPartId) {
-        const newGroup = this.findPartGroup(selectedPartId)
-        if (newGroup) {
-          this.outlinePass.selectedObjects = [newGroup]
+      // Restore outline selection if needed
+      if (selectedObjects.length > 0) {
+        // Find the new group for the selected part
+        const selectedPartId = selectedObjects[0].userData.partId
+        if (selectedPartId) {
+          const newGroup = this.findPartGroup(selectedPartId)
+          if (newGroup) {
+            this.outlinePass.selectedObjects = [newGroup]
+          }
         }
       }
+      
+      // Use composer instead of renderer
+      this.composer?.render()
+    } catch (error) {
+      console.error('Error in BudEngine animation loop:', error)
     }
-    
-    // Use composer instead of renderer
-    this.composer.render()
   }
 
   protected cleanupMeshes(currentPartId: string) {

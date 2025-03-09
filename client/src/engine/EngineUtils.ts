@@ -22,6 +22,8 @@ export class EngineUtils {
   protected raycaster: THREE.Raycaster
   protected mouse: THREE.Vector2
   protected domElement: HTMLElement
+  protected animationFrameId?: number
+  protected isDisposing: boolean = false
 
   // Plant rendering state
   protected parts = new Map<string, Part>()
@@ -143,36 +145,190 @@ export class EngineUtils {
     window.addEventListener('resize', this.onResize.bind(this))
 
     // Start render loop
+    this.startAnimation()
+  }
+
+  protected startAnimation() {
+    if (this.isDisposed() || this.isDisposing) return
+    
     this.animate()
+  }
+
+  protected animate() {
+    if (this.isDisposed() || this.isDisposing) return
+    
+    this.animationFrameId = requestAnimationFrame(() => this.animate())
+    if (!this.scene || !this.renderer || !this.composer) return
+    
+    this.controls?.update()
+
+    try {
+      // Store currently selected objects before cleanup
+      const selectedObjects = this.outlinePass?.selectedObjects || []
+
+      // Clear all groups at start of frame EXCEPT:
+      // 1. Non-group objects
+      // 2. Ground plane (isGround)
+      // 3. Part previews (isPartPreview)
+      // 4. Part pots and dirt
+      // 5. Debug spheres
+      const groupsToRemove = this.scene.children.filter(child => {
+        if (!child) return false
+        // remove toRemove
+        if (child.userData.toRemove) return true
+          
+        // Keep non-group objects
+        if (!(child instanceof THREE.Group)) {
+          // Keep ground plane, previews, and debug spheres
+          if (child.userData.isGround || child.userData.isPartPreview || child.userData.isDebug) return false
+          return false
+        }
+        
+        // Remove if it has a bodyId (it's part of a plant that will be re-rendered)
+        return child.userData.bodyId !== undefined
+      })
+      
+      // Only remove the visual meshes, not the underlying data
+      groupsToRemove.forEach(group => {
+        if (!group || !this.scene) return
+        this.scene.remove(group)
+        group.traverse(child => {
+          if (child instanceof THREE.Mesh) {
+            child.geometry?.dispose()
+            if (child.material instanceof THREE.Material) {
+              child.material.dispose()
+            }
+          }
+        })
+      })
+
+      // Render all root parts
+      if (this.roots?.size) {
+        Array.from(this.roots).forEach(rootId => {
+          if (!this.bodies) return
+          const body = Array.from(this.bodies.values())
+            .find(b => b.rootPartId === rootId)
+          if (body) {
+            this.renderBodyWithData(body.id, {
+              parts: this.parts,
+              bones: this.bones,
+              bodies: this.bodies,
+              roots: this.roots
+            })
+          }
+        })
+      }
+
+      // Restore outline selection if needed
+      if (selectedObjects.length > 0 && this.outlinePass) {
+        // Find the new group for the selected part
+        const selectedPartId = selectedObjects[0].userData.partId
+        if (selectedPartId) {
+          const newGroup = this.findPartGroup(selectedPartId)
+          if (newGroup) {
+            this.outlinePass.selectedObjects = [newGroup]
+          }
+        }
+      }
+
+      // Use composer instead of renderer
+      this.composer?.render()
+    } catch (error) {
+      console.error('Error in animation loop:', error)
+    }
+  }
+
+  protected stopAnimation() {
+    if (this.animationFrameId !== undefined) {
+      cancelAnimationFrame(this.animationFrameId)
+      this.animationFrameId = undefined
+    }
+  }
+
+  isDisposed(): boolean {
+    return !this.scene || this.isDisposing;
+  }
+
+  dispose() {
+    if (this.isDisposed()) return // Already disposed
+    
+    this.isDisposing = true
+    
+    try {
+      // Stop animation loop first and wait for it to complete
+      if (this.animationFrameId !== undefined) {
+        cancelAnimationFrame(this.animationFrameId)
+        this.animationFrameId = undefined
+      }
+
+      // Remove event listeners
+      window.removeEventListener('resize', this.onResize.bind(this))
+      
+      // Remove renderer from DOM
+      if (this.renderer?.domElement?.parentNode) {
+        this.renderer.domElement.remove()
+      }
+
+      // Clear all maps and collections
+      this.parts?.clear()
+      this.bones?.clear()
+      this.bodies?.clear()
+      this.roots?.clear()
+      this.boneTransforms?.clear()
+      this.partParentIds?.clear()
+      this.bonePartIds?.clear()
+
+      // Clear references in a specific order to avoid undefined access
+      this.controls = undefined as unknown as OrbitControls
+      this.composer = undefined as unknown as EffectComposer
+      this.outlinePass = undefined as unknown as OutlinePass
+      this.bloomPass = undefined as unknown as UnrealBloomPass
+      this.scene = undefined as unknown as THREE.Scene
+      this.camera = undefined as unknown as THREE.PerspectiveCamera
+      this.renderer = undefined as unknown as THREE.WebGLRenderer
+      this.raycaster = undefined as unknown as THREE.Raycaster
+      this.mouse = undefined as unknown as THREE.Vector2
+      this.domElement = undefined as unknown as HTMLElement
+    } catch (error) {
+      console.error('Error during disposal:', error)
+    } finally {
+      this.isDisposing = false
+    }
   }
 
   // Core plant rendering methods
   protected renderPlant(plantData: PlantData) {
-    this.parts = new Map(plantData.parts)
-    this.bones = new Map(plantData.bones)
-    this.bodies = new Map(plantData.bodies)
-    this.roots = new Set(plantData.roots)
+    // Store local references for rendering without modifying instance data
+    const renderParts = new Map(plantData.parts)
+    const renderBones = new Map(plantData.bones)
+    const renderBodies = new Map(plantData.bodies)
+    const renderRoots = new Set(plantData.roots)
 
     // Clear transforms for this frame
-    this.boneTransforms.clear()
-    this.bonePartIds.clear()
+    this.boneTransforms?.clear()
+    this.bonePartIds?.clear()
 
-    // Render all root parts
-    Array.from(this.roots).forEach(rootId => {
-      const body = Array.from(this.bodies.values())
+    // Render all root parts using local references
+    Array.from(renderRoots).forEach(rootId => {
+      const body = Array.from(renderBodies.values())
         .find(b => b.rootPartId === rootId)
       if (body) {
-        this.renderBody(body.id)
+        this.renderBodyWithData(body.id, {
+          parts: renderParts,
+          bones: renderBones,
+          bodies: renderBodies,
+          roots: renderRoots
+        })
       }
     })
   }
 
-  protected renderBody(bodyId: string) {
-    const body = this.bodies.get(bodyId)
+  protected renderBodyWithData(bodyId: string, data: PlantData) {
+    const body = data.bodies.get(bodyId)
     if (!body) return
 
     // Clean up all meshes for this body's part hierarchy before rendering
-    this.cleanupMeshes(body.rootPartId)
+    this.cleanupMeshesWithData(body.rootPartId, data)
 
     const worldTransform = new THREE.Matrix4().makeBasis(
       body.transform.right,
@@ -181,11 +337,11 @@ export class EngineUtils {
     )
     worldTransform.setPosition(body.transform.position)
     
-    this.renderPartHierarchy(body.rootPartId, worldTransform)
+    this.renderPartHierarchyWithData(body.rootPartId, worldTransform, data)
   }
 
-  protected cleanupMeshes(currentPartId: string) {
-    const currentPart = this.parts.get(currentPartId)
+  protected cleanupMeshesWithData(currentPartId: string, data: PlantData) {
+    const currentPart = data.parts.get(currentPartId)
     if (!currentPart) return
     
     // Get all meshes for current part's bones
@@ -207,23 +363,24 @@ export class EngineUtils {
     
     // Recursively clean up child parts
     for (const boneId of currentPart.boneIds) {
-      const bone = this.bones.get(boneId)
+      const bone = data.bones.get(boneId)
       if (bone) {
         for (const [childPartId] of bone.children.entries()) {
-          this.cleanupMeshes(childPartId)
+          this.cleanupMeshesWithData(childPartId, data)
         }
       }
     }
   }
 
-  protected renderPartHierarchy(
+  protected renderPartHierarchyWithData(
     partId: string, 
-    parentWorldTransform: THREE.Matrix4, 
+    parentWorldTransform: THREE.Matrix4,
+    data: PlantData,
     parentGroup?: THREE.Group,
     parentPartIds: Set<string> = new Set(),
     parentAttributes?: PartAttributes
   ) {
-    const part = this.parts.get(partId)
+    const part = data.parts.get(partId)
     if (!part) return
 
     // Store bone to part mapping for each bone in this part
@@ -285,14 +442,14 @@ export class EngineUtils {
     this.partParentIds.set(partId, currentParentIds)
 
     // Find the body this part belongs to
-    const body = Array.from(this.bodies.values()).find(b => {
+    const body = Array.from(data.bodies.values()).find(b => {
       let currentPart: Part | undefined = part
       while (currentPart) {
         if (b.rootPartId === currentPart.id) return true
         if (!currentPart.parentBoneId) break
-        const parentBone = this.bones.get(currentPart.parentBoneId)
+        const parentBone = data.bones.get(currentPart.parentBoneId)
         if (!parentBone) break
-        currentPart = this.parts.get(parentBone.partId)
+        currentPart = data.parts.get(parentBone.partId)
       }
       return false
     })
@@ -314,7 +471,7 @@ export class EngineUtils {
     
     // Process each bone in sequence
     for (const boneId of part.boneIds) {
-      const bone = this.bones.get(boneId)
+      const bone = data.bones.get(boneId)
       if (!bone) continue
 
       // First rotate current transform by bone's direction
@@ -519,7 +676,7 @@ export class EngineUtils {
         attachmentTransform.setPosition(attachPoint)
         
         // Recursively render child part
-        this.renderPartHierarchy(childPartId, attachmentTransform, partGroup, currentParentIds, attributes)
+        this.renderPartHierarchyWithData(childPartId, attachmentTransform, data, partGroup, currentParentIds, attributes)
       }
 
       // After rendering bone and children, translate current transform forward by bone length
@@ -586,72 +743,6 @@ export class EngineUtils {
     }
   }
 
-  protected animate = () => {
-    requestAnimationFrame(this.animate)
-    this.controls.update()
-
-    // Store currently selected objects before cleanup
-    const selectedObjects = this.outlinePass.selectedObjects
-
-    // Clear all groups at start of frame EXCEPT:
-    // 1. Non-group objects
-    // 2. Ground plane (isGround)
-    // 3. Part previews (isPartPreview)
-    // 4. Part pots and dirt
-    // 5. Debug spheres
-    const groupsToRemove = this.scene.children.filter(child => {
-      // remove toRemove
-      if (child.userData.toRemove) return true
-        
-      // Keep non-group objects
-      if (!(child instanceof THREE.Group)) {
-        // Keep ground plane, previews, and debug spheres
-        if (child.userData.isGround || child.userData.isPartPreview || child.userData.isDebug) return false
-        return false
-      }
-      
-      // Remove if it has a bodyId (it's part of a plant that will be re-rendered)
-      return child.userData.bodyId !== undefined
-    })
-    
-    // Only remove the visual meshes, not the underlying data
-    groupsToRemove.forEach(group => {
-      this.scene.remove(group)
-      group.traverse(child => {
-        if (child instanceof THREE.Mesh) {
-          child.geometry.dispose()
-          if (child.material instanceof THREE.Material) {
-            child.material.dispose()
-          }
-        }
-      })
-    })
-
-    // Render all root parts
-    Array.from(this.roots).forEach(rootId => {
-      const body = Array.from(this.bodies.values())
-        .find(b => b.rootPartId === rootId)
-      if (body) {
-        this.renderBody(body.id)
-      }
-    })
-
-    // Restore outline selection if needed
-    if (selectedObjects.length > 0) {
-      // Find the new group for the selected part
-      const selectedPartId = selectedObjects[0].userData.partId
-      if (selectedPartId) {
-        const newGroup = this.findPartGroup(selectedPartId)
-        if (newGroup) {
-          this.outlinePass.selectedObjects = [newGroup]
-        }
-      }
-    }
-
-    // Use composer instead of renderer
-    this.composer.render()
-  }
-
   // Helper method to find a part group in the scene
   protected findPartGroup(partId: string): THREE.Group | undefined {
     return this.scene.children.find(child => 
@@ -694,27 +785,5 @@ export class EngineUtils {
         }
       })
     }
-  }
-
-  dispose() {
-    window.removeEventListener('resize', this.onResize.bind(this))
-    
-    this.scene.traverse((object) => {
-      if (object instanceof THREE.Mesh) {
-        if (object.geometry) {
-          object.geometry.dispose()
-        }
-        if (object.material instanceof THREE.Material) {
-          object.material.dispose()
-        }
-      }
-    })
-
-    this.composer.dispose()
-    this.renderer.dispose()
-    this.controls.dispose()
-    
-    // Remove canvas from DOM
-    this.renderer.domElement.remove()
   }
 } 
