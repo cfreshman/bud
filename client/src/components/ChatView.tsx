@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { PlantData } from '../engine/types'
 import { ChatEngine, Message } from '../engine/ChatEngine'
+import { sendMessageToPlant } from '../services/api'
 
 interface ChatViewProps {
   plant: PlantData
@@ -14,6 +15,7 @@ export function ChatView({ plant, onClose }: ChatViewProps) {
   const [input, setInput] = useState('')
   const [showHistory, setShowHistory] = useState(false)
   const [messages, setMessages] = useState<Message[]>([])
+  const [isLoading, setIsLoading] = useState(false)
 
   useEffect(() => {
     if (!containerRef.current || !plant.plantId) return
@@ -43,19 +45,31 @@ export function ChatView({ plant, onClose }: ChatViewProps) {
     // Add user message
     const userMessage = chatEngine.addMessage(plant.plantId, input, 'user')
     setMessages(prev => [...prev, userMessage])
+    
+    // Clear input and reset textarea height
     setInput('')
-
-    // Reset textarea height
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto'
     }
 
-    // TODO: Get plant's response from API
-    const plantResponse = 'Hello! I am your plant companion.'
-    
-    // Add plant message
-    const plantMessage = chatEngine.addMessage(plant.plantId, plantResponse, 'plant')
-    setMessages(prev => [...prev, plantMessage])
+    // Show loading state
+    setIsLoading(true)
+
+    try {
+      // Get plant's response from API
+      const plantResponse = await sendMessageToPlant(plant.plantId, input, plant)
+      
+      // Add plant message
+      const plantMessage = chatEngine.addMessage(plant.plantId, plantResponse, 'plant')
+      setMessages(prev => [...prev, plantMessage])
+    } catch (error) {
+      console.error('Error getting plant response:', error)
+      // Add fallback message if API fails
+      const fallbackResponse = "I'm having trouble understanding right now."
+      chatEngine.addMessage(plant.plantId, fallbackResponse, 'plant')
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -91,8 +105,9 @@ export function ChatView({ plant, onClose }: ChatViewProps) {
           value={input}
           onChange={e => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="type a message..."
+          placeholder={isLoading ? "plant is thinking..." : "type a message..."}
           rows={1}
+          disabled={isLoading}
         />
 
         {/* History button */}

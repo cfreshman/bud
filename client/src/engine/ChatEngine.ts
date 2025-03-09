@@ -160,6 +160,10 @@ export class ChatEngine extends EngineUtils {
   }
 
   private showSpeechBubble(text: string) {
+    // Clear any existing speech bubbles
+    const existingBubbles = this.domElement.querySelectorAll('.chat-bubble');
+    existingBubbles.forEach(bubble => bubble.remove());
+
     // Find the plant's head bone
     const headBone = Array.from(this.bones.values()).find(bone => bone.isHead)
     if (!headBone) return
