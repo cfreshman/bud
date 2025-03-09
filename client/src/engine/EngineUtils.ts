@@ -34,6 +34,7 @@ export class EngineUtils {
   protected partParentIds = new Map<string, Set<string>>()
   protected bonePartIds = new Map<string, string>()
   protected isEditor: boolean = false
+  protected isCloseUp: boolean = false
   protected activePartId?: string
   protected selectedBoneId?: string
   protected debugMode: boolean = false
@@ -567,6 +568,43 @@ export class EngineUtils {
 
         // Add to part group instead of mesh
         partGroup.add(innerMesh)
+      }
+
+      // Add eyes if this is a head bone and it's a stem and we're in close-up view
+      if (bone.isHead && part.type === 'stem' && this.isCloseUp) {
+        const eyeGroup = new THREE.Group()
+        
+        // Create eyes with flat shading
+        const eyeGeo = new THREE.SphereGeometry(bone.width * 0.4, 12, 8)
+        const eyeMat = new THREE.MeshStandardMaterial({ 
+          color: '#ffffff',
+          roughness: 0.7,
+          metalness: 0.2,
+        })
+        const pupilGeo = new THREE.SphereGeometry(bone.width * 0.2, 8, 8)
+        const pupilMat = new THREE.MeshStandardMaterial({ 
+          color: '#000000',
+          roughness: 0.7,
+          metalness: 0.2,
+        })
+        
+        // Left eye with better positioning
+        const leftEye = new THREE.Mesh(eyeGeo, eyeMat)
+        leftEye.position.set(bone.width * 1.2, bone.length * 0.8, bone.width * 0.8)
+        const leftPupil = new THREE.Mesh(pupilGeo, pupilMat)
+        leftPupil.position.z = bone.width * 0.3
+        leftEye.add(leftPupil)
+        eyeGroup.add(leftEye)
+        
+        // Right eye with better positioning
+        const rightEye = new THREE.Mesh(eyeGeo, eyeMat)
+        rightEye.position.set(-bone.width * 1.2, bone.length * 0.8, bone.width * 0.8)
+        const rightPupil = new THREE.Mesh(pupilGeo, pupilMat)
+        rightPupil.position.z = bone.width * 0.3
+        rightEye.add(rightPupil)
+        eyeGroup.add(rightEye)
+        
+        mesh.add(eyeGroup)
       }
 
       // Position mesh using world transform
