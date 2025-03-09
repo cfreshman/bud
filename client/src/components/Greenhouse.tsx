@@ -3,6 +3,7 @@ import { ViewEngine } from '../engine/ViewEngine'
 import { PlantData } from '../engine/types'
 import { deserializePlantData } from '../utils/plantSaveUtils'
 import { PlotMenu } from './PlotMenu'
+import { ChatView } from './ChatView'
 
 interface GreenhouseProps {
   plants: Map<number, PlantData>
@@ -14,6 +15,7 @@ export function Greenhouse({ plants, onSelectPlot }: GreenhouseProps) {
   const engineRef = useRef<ViewEngine | null>(null)
   const cleanupRef = useRef(false)
   const [menuState, setMenuState] = useState<{ position: { x: number, y: number }, plotIndex: number } | null>(null)
+  const [chatState, setChatState] = useState<{ plant: PlantData } | null>(null)
   
   // Store callback in ref to avoid effect dependency
   const onSelectPlotRef = useRef(onSelectPlot)
@@ -21,13 +23,11 @@ export function Greenhouse({ plants, onSelectPlot }: GreenhouseProps) {
 
   // Create click handler with access to current plants
   const handlePlotClick = useCallback((plotIndex: number) => {
-    console.log('Plot clicked:', plotIndex, 'Has plant:', plants.has(plotIndex))
     // Only show menu if plot has a plant
     if (!plants.has(plotIndex)) return
 
     // Get plot position
     const position = engineRef.current?.getPlotScreenPosition(plotIndex)
-    console.log('Menu position:', position)
     if (!position) return
 
     setMenuState({ position, plotIndex })
@@ -69,7 +69,7 @@ export function Greenhouse({ plants, onSelectPlot }: GreenhouseProps) {
         engineRef.current = null
       }
     }
-  }, [handlePlotClick]) // Add handlePlotClick to dependencies
+  }, [handlePlotClick])
 
   // Update plants in plots when they change
   useEffect(() => {
@@ -99,7 +99,15 @@ export function Greenhouse({ plants, onSelectPlot }: GreenhouseProps) {
     })
   }, [plants])
 
-  console.log('Render with menuState:', menuState)
+  // Show ChatView when chatState is set
+  if (chatState) {
+    return (
+      <ChatView 
+        plant={chatState.plant}
+        onClose={() => setChatState(null)}
+      />
+    )
+  }
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
@@ -116,17 +124,17 @@ export function Greenhouse({ plants, onSelectPlot }: GreenhouseProps) {
           <PlotMenu
             position={menuState.position}
             onSelect={(action) => {
-              console.log('Menu action selected:', action, menuState.plotIndex)
               if (action === 'edit') {
                 onSelectPlotRef.current(menuState.plotIndex)
+              } else if (action === 'chat') {
+                const plant = plants.get(menuState.plotIndex)
+                if (plant) {
+                  setChatState({ plant })
+                }
               }
-              // TODO: Handle chat action
               setMenuState(null)
             }}
-            onClose={() => {
-              console.log('Menu closed')
-              setMenuState(null)
-            }}
+            onClose={() => setMenuState(null)}
           />
         )}
       </div>
