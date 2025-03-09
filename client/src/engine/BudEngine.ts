@@ -242,7 +242,7 @@ export class BudEngine extends EngineUtils {
       const mesh = this.createPartPreview(type, color)
       // Calculate proper height based on part type
       let previewHeight = 0.23 // Base height (dirt surface)
-      mesh.position.set(x, previewHeight, z)
+      mesh.position.set(x, mesh.position.y + previewHeight, z)
       this.scene.add(mesh)
       this.partMeshes.set(type, mesh)
     })
