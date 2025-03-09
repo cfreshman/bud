@@ -1,0 +1,238 @@
+import React, { useEffect, useRef, useState } from 'react';
+import { View, StyleSheet, Dimensions, PanResponder, GestureResponderEvent } from 'react-native';
+import { GLView, ExpoWebGLRenderingContext } from 'expo-gl';
+import { ViewEngine } from '../engine/ViewEngine';
+import { PlantData } from '../engine/types';
+import { AppText } from './AppText';
+import { LoadingScreen } from './LoadingScreen';
+
+interface PlantViewProps {
+  plant?: PlantData;
+}
+
+export function PlantView({ plant }: PlantViewProps) {
+  const engineRef = useRef<ViewEngine | null>(null);
+  const lastTouchesRef = useRef<{ [key: string]: { x: number, y: number } }>({});
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const window = Dimensions.get('window');
+
+  // Log when component mounts and unmounts
+  useEffect(() => {
+    console.log('PlantView mounted', { hasPlant: !!plant, dimensions: window });
+    return () => console.log('PlantView unmounted');
+  }, []);
+
+  // Log when plant prop changes
+  useEffect(() => {
+    console.log('Plant prop changed:', { 
+      hasPlant: !!plant,
+      roots: plant?.roots.size,
+      parts: plant?.parts.size
+    });
+  }, [plant]);
+
+  const panResponder = PanResponder.create({
+    onStartShouldSetPanResponder: () => true,
+    onMoveShouldSetPanResponder: () => true,
+
+    onPanResponderGrant: (e: GestureResponderEvent) => {
+      // Store initial touch positions
+      const touches = e.nativeEvent.touches;
+      lastTouchesRef.current = {};
+      touches.forEach(touch => {
+        lastTouchesRef.current[touch.identifier] = {
+          x: touch.pageX,
+          y: touch.pageY
+        };
+      });
+    },
+
+    onPanResponderMove: (e: GestureResponderEvent) => {
+      const touches = e.nativeEvent.touches;
+      
+      // Handle pinch gesture
+      if (touches.length === 2) {
+        const touch1 = touches[0];
+        const touch2 = touches[1];
+        const lastTouch1 = lastTouchesRef.current[touch1.identifier];
+        const lastTouch2 = lastTouchesRef.current[touch2.identifier];
+        
+        if (lastTouch1 && lastTouch2) {
+          // Calculate current and previous distances
+          const currentDist = Math.hypot(
+            touch1.pageX - touch2.pageX,
+            touch1.pageY - touch2.pageY
+          );
+          const prevDist = Math.hypot(
+            lastTouch1.x - lastTouch2.x,
+            lastTouch1.y - lastTouch2.y
+          );
+          
+          // Calculate scale factor
+          const scale = currentDist / prevDist;
+          engineRef.current?.onPinch(scale);
+        }
+      }
+      // Handle rotation gesture
+      else if (touches.length === 1) {
+        const touch = touches[0];
+        const lastTouch = lastTouchesRef.current[touch.identifier];
+        
+        if (lastTouch) {
+          const dx = touch.pageX - lastTouch.x;
+          const dy = touch.pageY - lastTouch.y;
+          engineRef.current?.onTouchMove(dx, dy);
+        }
+      }
+
+      // Update last touches
+      lastTouchesRef.current = {};
+      touches.forEach(touch => {
+        lastTouchesRef.current[touch.identifier] = {
+          x: touch.pageX,
+          y: touch.pageY
+        };
+      });
+    },
+
+    onPanResponderRelease: () => {
+      lastTouchesRef.current = {};
+    }
+  });
+
+  const onContextCreate = async (gl: ExpoWebGLRenderingContext) => {
+    console.log('GL context create starting...');
+    setError(null);
+    
+    try {
+      console.log('Initializing ViewEngine...');
+      engineRef.current = new ViewEngine(gl);
+      console.log('ViewEngine initialized');
+      
+      // Always try to set plant data immediately after engine creation
+      if (plant) {
+        console.log('Setting initial plant data in ViewEngine');
+        engineRef.current.setPlantData(plant);
+        console.log('Plant data set in ViewEngine');
+      }
+      
+      console.log('Setting loading to false...');
+      setIsLoading(false);
+      console.log('Loading set to false');
+    } catch (error) {
+      console.error('Error in PlantView initialization:', error);
+      setError('Failed to initialize plant view');
+      setIsLoading(false);
+    }
+  };
+
+  // Update plant data when it changes
+  useEffect(() => {
+    console.log('Plant update effect running:', {
+      hasEngine: !!engineRef.current,
+      hasPlant: !!plant
+    });
+    
+    if (engineRef.current && plant) {
+      try {
+        console.log('Updating plant data in engine');
+        engineRef.current.setPlantData(plant);
+        console.log('Plant data updated in engine');
+      } catch (error) {
+        console.error('Error updating plant data:', error);
+        setError('Failed to update plant');
+      }
+    }
+  }, [plant]);
+
+  // Log state changes
+  useEffect(() => {
+    console.log('PlantView state:', { isLoading, error });
+  }, [isLoading, error]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (engineRef.current && !engineRef.current.isDisposed()) {
+        console.log('Disposing engine');
+        engineRef.current.dispose();
+        engineRef.current = null;
+      }
+    };
+  }, []);
+
+  // Always render GL view with overlays
+  console.log('Rendering GL view with overlays');
+  return (
+    <View style={[styles.container, { width: window.width }]}>
+      <View {...panResponder.panHandlers} style={styles.fullSize}>
+        <GLView
+          style={[styles.fullSize, { width: window.width }]}
+          onContextCreate={onContextCreate}
+        />
+        {isLoading && (
+          <View style={[styles.fullSize, styles.overlay]}>
+            <LoadingScreen />
+          </View>
+        )}
+        {!isLoading && !plant && (
+          <View style={[styles.fullSize, styles.overlay]}>
+            <View style={styles.messageContainer}>
+              <AppText style={styles.title}>no bud to carry!</AppText>
+              <AppText style={styles.message}>
+                create a bud in the web app first,{'\n'}
+                then you can carry it with you
+              </AppText>
+            </View>
+          </View>
+        )}
+        {error && (
+          <View style={[styles.fullSize, styles.overlay]}>
+            <View style={styles.messageContainer}>
+              <AppText style={styles.title}>oops!</AppText>
+              <AppText style={styles.message}>{error}</AppText>
+            </View>
+          </View>
+        )}
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#111419',
+    alignSelf: 'flex-start',
+  },
+  fullSize: {
+    flex: 1,
+    position: 'relative',
+  },
+  messageContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  title: {
+    fontSize: 24,
+    marginBottom: 20,
+  },
+  message: {
+    fontSize: 16,
+    textAlign: 'center',
+    opacity: 0.7,
+  },
+  overlay: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    backgroundColor: '#111419',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+}); 

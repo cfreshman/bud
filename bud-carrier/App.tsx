@@ -4,13 +4,18 @@ import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import * as Font from 'expo-font';
 import { LoginView } from './src/components/LoginView';
 import { AppText } from './src/components/AppText';
+import { PlantView } from './src/components/PlantView';
 import { isLoggedIn } from './src/services/auth';
+import { loadPlant } from './src/services/plants';
+import { PlantData } from './src/engine/types';
 
 export default function App() {
   const [isAuthChecking, setIsAuthChecking] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isFontsLoaded, setIsFontsLoaded] = useState(false);
   const [fontError, setFontError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [plant, setPlant] = useState<PlantData | undefined>();
 
   // Load fonts
   useEffect(() => {
@@ -33,13 +38,50 @@ export default function App() {
   // Check auth state on mount
   useEffect(() => {
     async function checkAuth() {
-      setIsAuthChecking(true);
-      setIsAuthenticated(await isLoggedIn());
-      setIsAuthChecking(false);
+      try {
+        const isAuthed = await isLoggedIn();
+        console.log('Auth check:', { isAuthed });
+        setIsAuthenticated(isAuthed);
+      } catch (error) {
+        console.error('Auth check failed:', error);
+      } finally {
+        setIsAuthChecking(false);
+      }
     }
     checkAuth();
   }, []);
 
+  // Load plant when authenticated
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setIsLoading(false);
+      return;
+    }
+
+    async function loadData() {
+      console.log('Starting plant load...');
+      try {
+        const plantData = await loadPlant();
+        console.log('Plant loaded:', {
+          hasPlant: !!plantData,
+          roots: plantData?.roots.size,
+          parts: plantData?.parts.size,
+          bones: plantData?.bones.size,
+          bodies: plantData?.bodies.size,
+        });
+        setPlant(plantData);
+      } catch (error) {
+        console.error('Failed to load plant:', error);
+      } finally {
+        // Always set loading to false when plant load completes
+        setIsLoading(false);
+      }
+    }
+
+    loadData();
+  }, [isAuthenticated]);
+
+  // Show loading screen only during initial setup
   if (!isFontsLoaded || isAuthChecking) {
     return <LoadingScreen />;
   }
@@ -56,10 +98,11 @@ export default function App() {
     return <LoginView onLogin={() => setIsAuthenticated(true)} />;
   }
 
+  // Don't show loading screen here anymore since PlantView handles its own loading state
   return (
     <SafeAreaProvider>
       <View style={styles.container}>
-        <AppText style={styles.text}>bud 🌱</AppText>
+        <PlantView plant={plant} />
       </View>
     </SafeAreaProvider>
   );
