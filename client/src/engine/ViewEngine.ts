@@ -296,4 +296,24 @@ export class ViewEngine extends EngineUtils {
       console.error('Error in ViewEngine animation loop:', error)
     }
   }
+
+  getPlotScreenPosition(plotIndex: number): { x: number, y: number } | null {
+    const plot = this.plots[plotIndex]
+    if (!plot) return null
+
+    // Get plot's world position
+    const position = new THREE.Vector3()
+    plot.getWorldPosition(position)
+    position.y += 0.4 // Position above the pot
+
+    // Project to screen coordinates
+    const screenPosition = position.clone()
+    screenPosition.project(this.camera)
+
+    // Convert to pixel coordinates
+    const x = (screenPosition.x + 1) * this.domElement.clientWidth / 2
+    const y = (-screenPosition.y + 1) * this.domElement.clientHeight / 2
+
+    return { x, y }
+  }
 } 

@@ -1,7 +1,8 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { ViewEngine } from '../engine/ViewEngine'
 import { PlantData } from '../engine/types'
 import { deserializePlantData } from '../utils/plantSaveUtils'
+import { PlotMenu } from './PlotMenu'
 
 interface GreenhouseProps {
   plants: Map<number, PlantData>
@@ -12,19 +13,32 @@ export function Greenhouse({ plants, onSelectPlot }: GreenhouseProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const engineRef = useRef<ViewEngine | null>(null)
   const cleanupRef = useRef(false)
+  const [menuState, setMenuState] = useState<{ position: { x: number, y: number }, plotIndex: number } | null>(null)
   
   // Store callback in ref to avoid effect dependency
   const onSelectPlotRef = useRef(onSelectPlot)
   onSelectPlotRef.current = onSelectPlot
+
+  // Create click handler with access to current plants
+  const handlePlotClick = useCallback((plotIndex: number) => {
+    console.log('Plot clicked:', plotIndex, 'Has plant:', plants.has(plotIndex))
+    // Only show menu if plot has a plant
+    if (!plants.has(plotIndex)) return
+
+    // Get plot position
+    const position = engineRef.current?.getPlotScreenPosition(plotIndex)
+    console.log('Menu position:', position)
+    if (!position) return
+
+    setMenuState({ position, plotIndex })
+  }, [plants])
 
   useEffect(() => {
     if (!containerRef.current) return
     
     // Only create engine if it doesn't exist
     if (!engineRef.current) {
-      engineRef.current = new ViewEngine(containerRef.current, (plotIndex) => {
-        onSelectPlotRef.current(plotIndex)
-      })
+      engineRef.current = new ViewEngine(containerRef.current, handlePlotClick)
 
       // Load initial plants from localStorage
       for (let i = 0; i < 6; i++) {
@@ -55,7 +69,7 @@ export function Greenhouse({ plants, onSelectPlot }: GreenhouseProps) {
         engineRef.current = null
       }
     }
-  }, []) // Empty dependency array - only run on mount/unmount
+  }, [handlePlotClick]) // Add handlePlotClick to dependencies
 
   // Update plants in plots when they change
   useEffect(() => {
@@ -85,14 +99,37 @@ export function Greenhouse({ plants, onSelectPlot }: GreenhouseProps) {
     })
   }, [plants])
 
+  console.log('Render with menuState:', menuState)
+
   return (
-    <div 
-      ref={containerRef} 
-      style={{ 
-        width: '100%', 
-        height: '100%',
-        backgroundColor: '#111419'
-      }} 
-    />
+    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+      <div 
+        ref={containerRef} 
+        style={{ 
+          width: '100%', 
+          height: '100%',
+          backgroundColor: '#111419'
+        }}
+      />
+      <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
+        {menuState && (
+          <PlotMenu
+            position={menuState.position}
+            onSelect={(action) => {
+              console.log('Menu action selected:', action, menuState.plotIndex)
+              if (action === 'edit') {
+                onSelectPlotRef.current(menuState.plotIndex)
+              }
+              // TODO: Handle chat action
+              setMenuState(null)
+            }}
+            onClose={() => {
+              console.log('Menu closed')
+              setMenuState(null)
+            }}
+          />
+        )}
+      </div>
+    </div>
   )
 } 
