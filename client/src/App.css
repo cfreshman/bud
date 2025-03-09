@@ -461,7 +461,9 @@
   border-radius: 12px;
   font-family: monospace;
   font-size: 14px;
-  max-width: 300px;
+  min-width: 100px;
+  max-width: min(500px, 50vw);
+  width: max-content;
   white-space: pre-wrap;
   border: 1px solid #000000;
   line-height: 1.4;

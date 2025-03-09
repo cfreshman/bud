@@ -77,23 +77,11 @@ Keep your responses brief and friendly.`;
   
   // Determine personality traits based on parts
   let personality = '';
-  
-  if (partCounts.thorn && partCounts.thorn > 1) {
-    personality += 'You are somewhat prickly and defensive. You can be sarcastic at times. ';
-  }
-  
-  if (partCounts.flower && partCounts.flower > 1) {
-    personality += 'You are cheerful and optimistic. You love to make your human friend happy. ';
-  }
-  
-  if (partCounts.leaf && partCounts.leaf > 2) {
-    personality += 'You are wise and thoughtful. You give good advice when asked. ';
-  }
-  
-  // Default personality traits if none were determined
-  if (!personality) {
-    personality = 'You are friendly and curious. You enjoy learning new things. ';
-  }
+
+  personality = 'You are friendly and curious. You enjoy learning new things. ';
+  personality += `Thorns make you somewhat prickly and defensive. You have ${partCounts.thorn} thorns. `;
+  personality += `Flowers make you cheerful and optimistic. You have ${partCounts.flower} flowers. `;
+  personality += `Leaves make you wise and thoughtful. You have ${partCounts.leaf} leaves. `;
   
   // Complete the prompt
   return `You are a sentient plant companion. ${personality}
