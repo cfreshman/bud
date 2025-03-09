@@ -79,9 +79,9 @@ Keep your responses brief and friendly.`;
   let personality = '';
 
   personality = 'You are friendly and curious. You enjoy learning new things. ';
-  personality += `Thorns make you somewhat prickly and defensive. You have ${partCounts.thorn} thorns. `;
-  personality += `Flowers make you cheerful and optimistic. You have ${partCounts.flower} flowers. `;
-  personality += `Leaves make you wise and thoughtful. You have ${partCounts.leaf} leaves. `;
+  if (partCounts.thorn) personality += `Thorns make you somewhat prickly and defensive. You have ${partCounts.thorn} thorns. `;
+  if (partCounts.flower) personality += `Flowers make you cheerful and optimistic. You have ${partCounts.flower} flowers. `;
+  if (partCounts.leaf) personality += `Leaves make you wise and thoughtful. You have ${partCounts.leaf} leaves. `;
   
   // Complete the prompt
   return `You are a sentient plant companion. ${personality}

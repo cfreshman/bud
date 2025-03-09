@@ -201,17 +201,19 @@ export function ChatView({ plant, onClose }: ChatViewProps) {
             </div>
           </div>
           <div className="chat-history-messages">
-            {messages.map(msg => (
-              <div key={msg.id} className={`chat-message ${msg.sender}`}>
-                <div className="chat-message-content">
-                  {msg.content}
-                </div>
-              </div>
-            ))}
-            {messages.length === 0 && (
+            {messages.length === 0 ? (
               <div className="chat-empty-message">
                 no messages yet
               </div>
+            ) : (
+              // Reverse the messages array to maintain chronological order with column-reverse flex
+              [...messages].reverse().map(msg => (
+                <div key={msg.id} className={`chat-message ${msg.sender}`}>
+                  <div className="chat-message-content">
+                    {msg.content}
+                  </div>
+                </div>
+              ))
             )}
           </div>
         </div>

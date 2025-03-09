@@ -558,10 +558,55 @@
   flex: 1;
   overflow-y: auto;
   display: flex;
-  flex-direction: column;
+  flex-direction: column-reverse;
   gap: 12px;
   padding: 16px;
   max-height: calc(80vh - 80px);
+}
+
+/* Adjust the chat message container to maintain correct order in reversed flex */
+.chat-history-messages .chat-message {
+  display: flex;
+  width: 100%;
+}
+
+/* Align user messages to the right */
+.chat-history-messages .chat-message.user {
+  justify-content: flex-end;
+}
+
+/* Align plant messages to the left */
+.chat-history-messages .chat-message.plant {
+  justify-content: flex-start;
+}
+
+/* Style the message content with fit-content width */
+.chat-history-messages .chat-message-content {
+  max-width: 80%;
+  width: fit-content;
+  padding: 8px 12px;
+  border-radius: 12px;
+  background-color: #f0f0f0;
+}
+
+/* Style user message content */
+.chat-history-messages .chat-message.user .chat-message-content {
+  background-color: #007aff;
+  color: white;
+}
+
+/* Style plant message content */
+.chat-history-messages .chat-message.plant .chat-message-content {
+  background-color: #e5e5ea;
+  color: black;
+}
+
+/* Empty message should appear at the bottom in reversed layout */
+.chat-history-messages .chat-empty-message {
+  margin-top: auto;
+  width: 100%;
+  text-align: center;
+  color: #888;
 }
 
 /* Loading Screen */
