@@ -8,9 +8,10 @@ import { ChatView } from './ChatView'
 interface GreenhouseProps {
   plants: Map<number, PlantData>
   onSelectPlot: (plotIndex: number) => void
+  onStartChat?: (plotIndex: number) => void
 }
 
-export function Greenhouse({ plants, onSelectPlot }: GreenhouseProps) {
+export function Greenhouse({ plants, onSelectPlot, onStartChat }: GreenhouseProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const engineRef = useRef<ViewEngine | null>(null)
   const cleanupRef = useRef(false)
@@ -123,9 +124,15 @@ export function Greenhouse({ plants, onSelectPlot }: GreenhouseProps) {
               if (action === 'edit') {
                 onSelectPlotRef.current(menuState.plotIndex)
               } else if (action === 'chat') {
-                const plant = plants.get(menuState.plotIndex)
-                if (plant) {
-                  setChatState({ plant })
+                if (onStartChat) {
+                  // Use the new prop if provided
+                  onStartChat(menuState.plotIndex)
+                } else {
+                  // Fall back to existing behavior
+                  const plant = plants.get(menuState.plotIndex)
+                  if (plant) {
+                    setChatState({ plant })
+                  }
                 }
               }
               setMenuState(null)
