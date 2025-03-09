@@ -138,8 +138,11 @@ export function ChatView({ plant, onClose }: ChatViewProps) {
         return
       }
       
-      e.preventDefault()
-      handleSend()
+      // Only send if not currently loading
+      if (!isLoading) {
+        e.preventDefault()
+        handleSend()
+      }
     }
   }
 
@@ -166,7 +169,6 @@ export function ChatView({ plant, onClose }: ChatViewProps) {
           onKeyDown={handleKeyDown}
           placeholder={isLoading ? "plant is thinking..." : "type a message..."}
           rows={1}
-          disabled={isLoading}
         />
 
         {/* History button */}
