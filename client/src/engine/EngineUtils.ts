@@ -38,6 +38,14 @@ export class EngineUtils {
   protected activePartId?: string
   protected selectedBoneId?: string
   protected debugMode: boolean = false
+  
+  // Wind system state
+  protected isWindy: boolean = false
+  protected windTime: number = 0
+  protected windRotations = new Map<string, THREE.Quaternion>()
+  protected windVelocities = new Map<string, THREE.Vector3>()
+  protected windPhaseOffsets = new Map<string, {x: number, y: number, z: number}>()
+  protected lastTime?: number
 
   constructor(container: HTMLElement) {
     this.domElement = container
@@ -160,6 +168,14 @@ export class EngineUtils {
     
     this.animationFrameId = requestAnimationFrame(() => this.animate())
     if (!this.scene || !this.renderer || !this.composer) return
+    
+    // Update wind if enabled
+    if (this.isWindy) {
+      const currentTime = performance.now() / 1000
+      const deltaTime = Math.min(0.1, currentTime - (this.lastTime || currentTime))
+      this.lastTime = currentTime
+      this.updateWind(deltaTime)
+    }
     
     this.controls?.update()
 
@@ -468,7 +484,23 @@ export class EngineUtils {
       this.scene.add(partGroup)
     }
 
-    let currentTransform = parentWorldTransform.clone()
+    // Apply wind effect to the entire part if enabled
+    let transformWithWind = parentWorldTransform.clone()
+    
+    if (this.isWindy && !this.isEditor) {
+      // Get wind rotation for this part
+      const windRotation = this.windRotations.get(partId)
+      
+      if (windRotation) {
+        // Create rotation matrix from wind effect
+        const windMatrix = new THREE.Matrix4().makeRotationFromQuaternion(windRotation)
+        
+        // Apply wind rotation to the parent transform
+        transformWithWind.multiply(windMatrix)
+      }
+    }
+    
+    let currentTransform = transformWithWind.clone()
     
     // Process each bone in sequence
     for (const boneId of part.boneIds) {
@@ -822,6 +854,101 @@ export class EngineUtils {
           material.emissive.setHex(highlight ? 0x444444 : 0x000000)
         }
       })
+    }
+  }
+
+  /**
+   * Update wind effects
+   */
+  protected updateWind(deltaTime: number): void {
+    // Increment wind time
+    this.windTime += deltaTime
+    
+    // Update wind velocities and rotations for each part
+    this.parts.forEach((part, partId) => {
+      // Skip if part has no bones
+      if (part.boneIds.length === 0) return
+      
+      // Get or create wind velocity for this part
+      if (!this.windVelocities.has(partId)) {
+        // Initialize with very small random velocity for subtle movement
+        const velocity = new THREE.Vector3(
+          (Math.random() - 0.5) * this.getWindFactor(part.type) * 0.01,
+          (Math.random() - 0.5) * this.getWindFactor(part.type) * 0.01,
+          (Math.random() - 0.5) * this.getWindFactor(part.type) * 0.01
+        )
+        this.windVelocities.set(partId, velocity)
+      }
+      
+      // Get or create wind rotation for this part
+      if (!this.windRotations.has(partId)) {
+        this.windRotations.set(partId, new THREE.Quaternion())
+      }
+      
+      // Generate unique phase offsets for this part if they don't exist
+      if (!this.windPhaseOffsets.has(partId)) {
+        this.windPhaseOffsets.set(partId, {
+          x: Math.random() * 100,
+          y: Math.random() * 100,
+          z: Math.random() * 100
+        })
+      }
+      
+      // Get current velocity, rotation, and phase offsets
+      const velocity = this.windVelocities.get(partId)!
+      const rotation = this.windRotations.get(partId)!
+      const phaseOffsets = this.windPhaseOffsets.get(partId)!
+      
+      // Use much lower frequencies for more natural, subtle movement
+      // These frequencies create wavelengths of ~20-40 seconds for a full cycle
+      const baseFreq = 0.05 + Math.random() * 0.03
+      
+      // Apply simple physics - add very gentle force based on long sine waves
+      const force = new THREE.Vector3(
+        Math.sin((this.windTime + phaseOffsets.x) * baseFreq) * this.getWindFactor(part.type) * 0.0008,
+        Math.sin((this.windTime + phaseOffsets.y) * baseFreq * 0.7) * this.getWindFactor(part.type) * 0.0003,
+        Math.sin((this.windTime + phaseOffsets.z) * baseFreq * 0.5) * this.getWindFactor(part.type) * 0.0005
+      )
+      
+      // Apply force to velocity
+      velocity.add(force)
+      
+      // Apply stronger damping for more controlled movement
+      velocity.multiplyScalar(0.98)
+      
+      // Limit maximum velocity based on part type (much lower values for very subtle movement)
+      const maxVel = this.getWindFactor(part.type) * 0.02
+      if (velocity.length() > maxVel) {
+        velocity.normalize().multiplyScalar(maxVel)
+      }
+      
+      // Create rotation delta from velocity
+      const rotationDelta = new THREE.Quaternion()
+        .setFromEuler(new THREE.Euler(
+          velocity.x * deltaTime,
+          velocity.y * deltaTime,
+          velocity.z * deltaTime
+        ))
+      
+      // Apply rotation delta
+      rotation.multiply(rotationDelta)
+      
+      // Apply gentle spring force to return to identity rotation
+      const identityRotation = new THREE.Quaternion()
+      rotation.slerp(identityRotation, deltaTime * 0.2)
+    })
+  }
+  
+  /**
+   * Get wind factor based on part type
+   */
+  protected getWindFactor(partType: PartType): number {
+    switch (partType) {
+      case 'leaf': return 0.6
+      case 'flower': return 0.4
+      case 'thorn': return 0.1
+      case 'stem': return 0.05
+      default: return 0.2
     }
   }
 } 

@@ -580,6 +580,9 @@
 .loading-text {
   font-size: 18px;
   letter-spacing: 1px;
+  border: 1px solid currentcolor;
+  border-radius: 99em;
+  padding: .125em .75em;
 }
 
 .bud-bubble {

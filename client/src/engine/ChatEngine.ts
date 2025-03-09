@@ -27,6 +27,7 @@ export class ChatEngine extends EngineUtils {
     // Set flags for eyes and editor mode
     this.isCloseUp = true
     this.isEditor = false
+    this.isWindy = true
 
     // Configure scene for chat view - green background
     this.scene.background = new THREE.Color('#88aa99')
