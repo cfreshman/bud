@@ -685,12 +685,12 @@ export class EngineUtils {
   protected highlightMesh(mesh: THREE.Mesh | THREE.Group, highlight: boolean) {
     if (mesh instanceof THREE.Mesh) {
       const material = mesh.material as THREE.MeshStandardMaterial
-      material.emissive.setHex(highlight ? 0x222222 : 0x000000)
+      material.emissive.setHex(highlight ? 0x444444 : 0x000000)
     } else {
       mesh.traverse(child => {
         if (child instanceof THREE.Mesh) {
           const material = child.material as THREE.MeshStandardMaterial
-          material.emissive.setHex(highlight ? 0x222222 : 0x000000)
+          material.emissive.setHex(highlight ? 0x444444 : 0x000000)
         }
       })
     }
