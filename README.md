@@ -20,7 +20,7 @@ procedural plant-life simulation with AI companions. each bud's personality emer
 - openai api for natural dialogue
 
 ### companion app
-- a react-native app that allows you to carry a bud with you - 'a bud in your pocket'
+- a react-native app 'bud carrier' that allows you to carry a bud with you - 'a bud in your pocket'
 
 ## stack
 - typescript

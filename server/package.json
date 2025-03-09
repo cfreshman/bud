@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node index.js",
     "dev": "nodemon index.js",
-    "db": "mkdir -p data/db && mongod --dbpath data/db --port 28001"
+    "db": "mkdir -p data/db && mongod --dbpath data/db --port 28000"
   },
   "dependencies": {
     "cors": "^2.8.5",
