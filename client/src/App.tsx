@@ -46,6 +46,27 @@ function App() {
         const savedPlants = await loadPlants()
         setPlants(savedPlants)
 
+        // Load active chat state if it exists
+        const chatStateStr = localStorage.getItem('chat_state')
+        console.log('Chat state from storage:', chatStateStr)
+        
+        if (chatStateStr) {
+          try {
+            const chatState = JSON.parse(chatStateStr)
+            console.log('Parsed chat state:', chatState)
+            console.log('Has plant?', savedPlants.has(chatState.plotIndex))
+            
+            if (savedPlants.has(chatState.plotIndex)) {
+              console.log('Restoring chat for plot:', chatState.plotIndex)
+              setSelectedPlot(chatState.plotIndex)
+              setIsChatting(true)
+            }
+          } catch (error) {
+            console.error('Failed to load chat state:', error)
+            localStorage.removeItem('chat_state')
+          }
+        }
+
         // Load active editing state if it exists
         const editorStateStr = localStorage.getItem('editor_plant_state')
         if (editorStateStr) {
@@ -60,33 +81,10 @@ function App() {
             localStorage.removeItem('editor_plant_state')
           }
         }
-        
-        // Load active chat state if it exists
-        const chatStateStr = localStorage.getItem('chat_state')
-        if (chatStateStr && !isEditing) {
-          try {
-            const chatState = JSON.parse(chatStateStr)
-            const plotIndex = chatState.plotIndex
-            
-            // Only restore chat if the plant exists
-            if (savedPlants.has(plotIndex)) {
-              setSelectedPlot(plotIndex)
-              setIsChatting(true)
-            } else {
-              // Clean up invalid chat state
-              localStorage.removeItem('chat_state')
-            }
-          } catch (error) {
-            console.error('Failed to load chat state:', error)
-            localStorage.removeItem('chat_state')
-          }
-        }
       } catch (error) {
         console.error('Failed to load plants:', error)
       } finally {
-        setTimeout(() => {
-          setIsLoading(false)
-        }, 800)
+        setIsLoading(false)
       }
     }
     
@@ -111,9 +109,9 @@ function App() {
   // Save chat state whenever it changes
   useEffect(() => {
     if (isChatting && selectedPlot !== null) {
-      localStorage.setItem('chat_state', JSON.stringify({ plotIndex: selectedPlot }))
-    } else {
-      localStorage.removeItem('chat_state')
+      const state = { plotIndex: selectedPlot }
+      console.log('Saving chat state:', state)
+      localStorage.setItem('chat_state', JSON.stringify(state))
     }
   }, [isChatting, selectedPlot])
 
@@ -134,13 +132,20 @@ function App() {
   }
   
   const handleStartChat = (plotIndex: number) => {
-    if (!plants.has(plotIndex)) return
+    console.log('Starting chat for plot:', plotIndex)
+    if (!plants.has(plotIndex)) {
+      console.log('No plant found for plot:', plotIndex)
+      return
+    }
     
     setSelectedPlot(plotIndex)
     setIsChatting(true)
+    console.log('Chat started for plot:', plotIndex)
   }
 
   const handleCloseChat = () => {
+    console.log('Closing chat')
+    localStorage.removeItem('chat_state')
     setIsChatting(false)
     setSelectedPlot(null)
   }
@@ -208,18 +213,12 @@ function App() {
     localStorage.clear() // Clear all plant and chat data
   }
 
-  if (isAuthChecking) {
-    return <LoadingScreen />
-  }
-
-  if (!isAuthenticated) {
-    return <LoginView onLogin={() => setIsAuthenticated(true)} />
-  }
-
   return (
     <div className="app">
-      {isLoading ? (
+      {isAuthChecking || isLoading ? (
         <LoadingScreen />
+      ) : !isAuthenticated ? (
+        <LoginView onLogin={() => setIsAuthenticated(true)} />
       ) : isEditing ? (
         <Editor 
           plantData={activeEditingPlant}
@@ -230,7 +229,8 @@ function App() {
         />
       ) : isChatting && selectedPlot !== null && plants.has(selectedPlot) ? (
         <ChatView 
-          plant={plants.get(selectedPlot)!} 
+          plant={plants.get(selectedPlot)!}
+          plotIndex={selectedPlot}
           onClose={handleCloseChat} 
         />
       ) : (

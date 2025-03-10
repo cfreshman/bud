@@ -6,10 +6,11 @@ import { loadMessages, saveMessages, clearMessages } from '../utils/chatStorage'
 
 interface ChatViewProps {
   plant: PlantData
+  plotIndex: number
   onClose: () => void
 }
 
-export function ChatView({ plant, onClose }: ChatViewProps) {
+export function ChatView({ plant, plotIndex, onClose }: ChatViewProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const [chatEngine, setChatEngine] = useState<ChatEngine>()
@@ -18,42 +19,66 @@ export function ChatView({ plant, onClose }: ChatViewProps) {
   const [messages, setMessages] = useState<Message[]>([])
   const [isLoading, setIsLoading] = useState(false)
 
-  // Load messages from localStorage when component mounts
+  // Load messages when component mounts
   useEffect(() => {
-    if (!plant.plantId) return
-    
-    const savedMessages = loadMessages(plant.plantId)
-    setMessages(savedMessages)
-    
-    // Add saved messages to chat engine when it's initialized
-    if (chatEngine && savedMessages.length > 0) {
-      // First clear any existing messages
-      chatEngine.addMessage(plant.plantId, '', 'plant')
-      
-      // Add all messages to the chat engine in order, but skip showing thinking bubbles
-      for (let i = 0; i < savedMessages.length; i++) {
-        const msg = savedMessages[i];
-        const isLastMessage = i === savedMessages.length - 1;
+    const loadChatHistory = async () => {
+      try {
+        setIsLoading(true)
+        const savedMessages = await loadMessages(plotIndex)
+        setMessages(savedMessages)
         
-        // For the last message, don't skip thinking if it's from a user
-        const skipThinking = !(isLastMessage && msg.sender === 'user');
-        
-        chatEngine.addMessage(plant.plantId!, msg.content, msg.sender, skipThinking);
-      }
-      
-      // If the last message is from the user, show a "..." bubble
-      const lastMessage = savedMessages[savedMessages.length - 1]
-      if (lastMessage && lastMessage.sender === 'user') {
-        chatEngine.addMessage(plant.plantId, '...', 'plant')
+        // Add saved messages to chat engine when it's initialized
+        if (chatEngine && savedMessages.length > 0) {
+          // First clear any existing messages
+          chatEngine.addMessage(plant.plantId!, '', 'plant')
+          
+          // Add all messages to the chat engine in order, but skip showing thinking bubbles
+          for (let i = 0; i < savedMessages.length; i++) {
+            const msg = savedMessages[i];
+            const isLastMessage = i === savedMessages.length - 1;
+            
+            // For the last message, don't skip thinking if it's from a user
+            const skipThinking = !(isLastMessage && msg.sender === 'user');
+            
+            chatEngine.addMessage(plant.plantId!, msg.content, msg.sender, skipThinking);
+          }
+          
+          // If the last message is from the user, show a "..." bubble
+          const lastMessage = savedMessages[savedMessages.length - 1]
+          if (lastMessage && lastMessage.sender === 'user') {
+            chatEngine.addMessage(plant.plantId!, '...', 'plant')
+          }
+        }
+      } catch (error) {
+        console.error('Error loading chat history:', error)
+      } finally {
+        setIsLoading(false)
       }
     }
-  }, [plant.plantId, chatEngine])
+    
+    loadChatHistory()
+  }, [plotIndex, chatEngine])
 
-  // Save messages to localStorage when they change
+  // Save messages when they change or component unmounts
   useEffect(() => {
-    if (!plant.plantId || messages.length === 0) return
-    saveMessages(plant.plantId, messages)
-  }, [plant.plantId, messages])
+    if (messages.length === 0) return
+    
+    const syncMessages = async () => {
+      try {
+        await saveMessages(plotIndex, messages)
+      } catch (error) {
+        console.error('Error saving messages:', error)
+      }
+    }
+    
+    // Save immediately when messages change
+    syncMessages()
+    
+    // Also save when component unmounts
+    return () => {
+      syncMessages()
+    }
+  }, [plotIndex, messages])
 
   useEffect(() => {
     if (!containerRef.current || !plant.plantId) return
@@ -121,11 +146,11 @@ export function ChatView({ plant, onClose }: ChatViewProps) {
     }
   }
 
-  const handleClearHistory = () => {
+  const handleClearHistory = async () => {
     if (!plant.plantId || !chatEngine) return
     
-    // Clear messages in localStorage
-    clearMessages(plant.plantId)
+    // Clear messages in localStorage and cloud
+    await clearMessages(plotIndex)
     
     // Clear messages in state
     setMessages([])
