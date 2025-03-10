@@ -1,12 +1,22 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, StyleSheet, Dimensions, PanResponder, GestureResponderEvent } from 'react-native';
+import { View, StyleSheet, Dimensions, PanResponder, GestureResponderEvent, TextInput, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import { GLView, ExpoWebGLRenderingContext } from 'expo-gl';
 import { ViewEngine } from '../engine/ViewEngine';
 import { PlantData } from '../engine/types';
 import { AppText } from './AppText';
 import { LoadingScreen } from './LoadingScreen';
+import { sendMessageToPlant } from '../services/api';
 import * as THREE from 'three';
 import { Renderer } from 'expo-three';
+import { SafeAreaView } from 'react-native-safe-area-context';
+
+interface Message {
+  id: string;
+  plantId: string;
+  content: string;
+  sender: 'user' | 'plant';
+  timestamp: number;
+}
 
 interface PlantViewProps {
   plant?: PlantData;
@@ -20,6 +30,12 @@ export function PlantView({ plant }: PlantViewProps) {
   const [error, setError] = useState<string | null>(null);
   const window = Dimensions.get('window');
   const [hasEngine, setHasEngine] = useState(false);
+  
+  // Chat state
+  const [input, setInput] = useState('');
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [isMessageLoading, setIsMessageLoading] = useState(false);
+  const scrollViewRef = useRef<ScrollView>(null);
 
   // Log when component mounts and unmounts
   useEffect(() => {
@@ -185,6 +201,66 @@ export function PlantView({ plant }: PlantViewProps) {
     error
   });
 
+  const handleSend = async () => {
+    if (!input.trim() || !plant?.plantId || isMessageLoading) return;
+    
+    setIsMessageLoading(true);
+    
+    // Create user message
+    const userMessage: Message = {
+      id: Math.random().toString(),
+      plantId: plant.plantId,
+      content: input,
+      sender: 'user',
+      timestamp: Date.now()
+    };
+    
+    // Clear input
+    setInput('');
+    
+    try {
+      // Add user message to messages
+      setMessages(prev => [...prev, userMessage]);
+      
+      // Get plant's response
+      const plantResponse = await sendMessageToPlant(plant.plantId, input, plant);
+      
+      // Create plant message
+      const plantMessage: Message = {
+        id: Math.random().toString(),
+        plantId: plant.plantId,
+        content: plantResponse,
+        sender: 'plant',
+        timestamp: Date.now()
+      };
+      
+      // Add plant message to messages
+      setMessages(prev => [...prev, plantMessage]);
+      
+      // Scroll to bottom
+      scrollViewRef.current?.scrollToEnd({ animated: true });
+    } catch (error) {
+      console.error('Error getting plant response:', error);
+      // Add fallback message if API fails
+      const fallbackMessage: Message = {
+        id: Math.random().toString(),
+        plantId: plant.plantId,
+        content: "I'm having trouble understanding right now.",
+        sender: 'plant',
+        timestamp: Date.now()
+      };
+      setMessages(prev => [...prev, fallbackMessage]);
+    } finally {
+      setIsMessageLoading(false);
+    }
+  };
+
+  const handleKeyPress = ({ nativeEvent: { key, shiftKey } }: any) => {
+    if (key === 'Enter' && !shiftKey) {
+      handleSend();
+    }
+  };
+
   return (
     <View style={[styles.container, { width: window.width }]}>
       <View {...panResponder.panHandlers} style={styles.fullSize}>
@@ -192,6 +268,30 @@ export function PlantView({ plant }: PlantViewProps) {
           style={[styles.fullSize, { width: window.width }]}
           onContextCreate={onContextCreate}
         />
+        
+        {/* Chat overlay */}
+        <SafeAreaView 
+          style={styles.chatOverlay}
+          edges={['bottom']}
+        >
+          {/* Input only - no messages area */}
+          <View style={styles.inputContainer}>
+            <TextInput
+              style={styles.input}
+              value={input}
+              onChangeText={setInput}
+              placeholder={isMessageLoading ? "plant is thinking..." : "type a message..."}
+              placeholderTextColor="#666666"
+              onKeyPress={handleKeyPress}
+              editable={!isMessageLoading}
+              returnKeyType="send"
+              blurOnSubmit={false}
+              multiline
+              autoCapitalize="none"
+            />
+          </View>
+        </SafeAreaView>
+
         {isLoading && (
           <View style={[styles.fullSize, styles.overlay]}>
             <LoadingScreen />
@@ -255,5 +355,24 @@ const styles = StyleSheet.create({
     backgroundColor: '#111419',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  chatOverlay: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'transparent',
+  },
+  inputContainer: {
+    margin: 16,
+  },
+  input: {
+    backgroundColor: '#ffffff',
+    color: '#000000',
+    padding: 12,
+    borderRadius: 8,
+    fontSize: 14,
+    fontFamily: 'SpaceMono',
+    maxHeight: 100,
   },
 }); 
