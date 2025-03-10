@@ -14,6 +14,7 @@ export function PlantView({ plant }: PlantViewProps) {
   const engineRef = useRef<ViewEngine | null>(null);
   const lastTouchesRef = useRef<{ [key: string]: { x: number, y: number } }>({});
   const [isLoading, setIsLoading] = useState(true);
+  const [isFirstRenderComplete, setIsFirstRenderComplete] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const window = Dimensions.get('window');
 
@@ -115,9 +116,9 @@ export function PlantView({ plant }: PlantViewProps) {
         console.log('Setting initial plant data in ViewEngine');
         engineRef.current.setPlantData(plant);
         console.log('Plant data set in ViewEngine');
+        setIsFirstRenderComplete(true);
       }
       
-      console.log('Setting loading to false...');
       setIsLoading(false);
       console.log('Loading set to false');
     } catch (error) {
@@ -139,6 +140,7 @@ export function PlantView({ plant }: PlantViewProps) {
         console.log('Updating plant data in engine');
         engineRef.current.setPlantData(plant);
         console.log('Plant data updated in engine');
+        setIsFirstRenderComplete(true);
       } catch (error) {
         console.error('Error updating plant data:', error);
         setError('Failed to update plant');
@@ -171,7 +173,7 @@ export function PlantView({ plant }: PlantViewProps) {
           style={[styles.fullSize, { width: window.width }]}
           onContextCreate={onContextCreate}
         />
-        {isLoading && (
+        {(isLoading || !isFirstRenderComplete) && (
           <View style={[styles.fullSize, styles.overlay]}>
             <LoadingScreen />
           </View>

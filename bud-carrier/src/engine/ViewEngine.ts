@@ -57,12 +57,24 @@ export class ViewEngine {
     // Initialize renderer with correct viewport
     console.log('Creating renderer...');
     this.renderer = new Renderer({ gl });
+    
+    // Reduce resolution by half while keeping display size
+    const pixelRatio = 0.5;
+    const renderWidth = Math.floor(width * pixelRatio);
+    const renderHeight = Math.floor(height * pixelRatio);
+    
+    // Set display size to full dimensions
     this.renderer.setSize(width, height, false);
+    this.renderer.setPixelRatio(pixelRatio);
+    
+    // Set viewport to full dimensions (not render dimensions)
     gl.viewport(0, 0, width, height);
     
     this.renderer.setClearColor('#88aa99', 1);
-    this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    
+    // Update camera aspect to match display dimensions
+    this.camera.aspect = width / height;
+    this.camera.updateProjectionMatrix();
     
     const color = new THREE.Color();
     this.renderer.getClearColor(color);
@@ -80,58 +92,40 @@ export class ViewEngine {
     // Add directional light with reduced shadow quality for performance
     const directionalLight = new THREE.DirectionalLight(0xffffff, 2.2);
     directionalLight.position.set(2, 4, 2);
-    directionalLight.castShadow = true;
-    directionalLight.shadow.mapSize.width = 1024;
-    directionalLight.shadow.mapSize.height = 1024;
-    directionalLight.shadow.camera.near = 0.1;
-    directionalLight.shadow.camera.far = 20;
-    directionalLight.shadow.camera.left = -5;
-    directionalLight.shadow.camera.right = 5;
-    directionalLight.shadow.camera.top = 5;
-    directionalLight.shadow.camera.bottom = -5;
-    directionalLight.shadow.bias = -0.001;
     this.scene.add(directionalLight);
     console.log('Lights added to scene');
 
     // Add ground - green
-    const groundGeo = new THREE.CircleGeometry(5, 32);
-    const groundMat = new THREE.MeshStandardMaterial({ 
+    const groundGeo = new THREE.CircleGeometry(2, 32);
+    const groundMat = new THREE.MeshPhongMaterial({ 
       color: '#bbddbb',
-      roughness: 0.8,
-      metalness: 0.1
+      shininess: 0
     });
     const ground = new THREE.Mesh(groundGeo, groundMat);
     ground.rotation.x = -Math.PI / 2;
-    ground.receiveShadow = true;
     this.scene.add(ground);
     console.log('Ground added to scene');
 
     // Add pot
     const potGeo = new THREE.CylinderGeometry(0.6, 0.4, 0.4, 32);
-    const potMat = new THREE.MeshStandardMaterial({ 
+    const potMat = new THREE.MeshPhongMaterial({ 
       color: '#8B5E3C',
-      roughness: 0.6,
-      metalness: 0.1
+      shininess: 10
     });
     const pot = new THREE.Mesh(potGeo, potMat);
     pot.position.y = 0.2;
-    pot.castShadow = true;
-    pot.receiveShadow = true;
     this.scene.add(pot);
     console.log('Pot added to scene');
 
     // Add dirt
     const dirtGeo = new THREE.SphereGeometry(0.55, 32, 16);
-    const dirtMat = new THREE.MeshStandardMaterial({
+    const dirtMat = new THREE.MeshPhongMaterial({
       color: '#5C4033',
-      roughness: 0.8,
-      metalness: 0
+      shininess: 0
     });
     const dirt = new THREE.Mesh(dirtGeo, dirtMat);
     dirt.scale.y = 0.3;
     dirt.position.y = 0.35;
-    dirt.castShadow = true;
-    dirt.receiveShadow = true;
     this.scene.add(dirt);
     console.log('Dirt added to scene');
 
@@ -202,6 +196,30 @@ export class ViewEngine {
     }
   };
 
+  private fitToPlant() {
+    // Create bounding box including plant group and pot
+    const box = new THREE.Box3();
+    box.expandByObject(this.plantGroup);
+    box.expandByPoint(new THREE.Vector3(-0.6, 0, -0.6)); // Pot bounds
+    box.expandByPoint(new THREE.Vector3(0.6, 0, 0.6));   // Pot bounds
+
+    // Get box dimensions
+    const size = box.getSize(new THREE.Vector3());
+    const center = box.getCenter(new THREE.Vector3());
+
+    // Calculate required distance based on box size and field of view
+    const fov = this.camera.fov * Math.PI / 180;
+    const maxDim = Math.max(size.x, size.z); // Width/depth
+    const fitHeightDistance = size.y / (2 * Math.tan(fov / 2));
+    const fitWidthDistance = maxDim / (2 * Math.tan((fov * this.camera.aspect) / 2));
+    const fitDistance = Math.max(fitHeightDistance, fitWidthDistance) * 1.2; // Add 20% margin
+
+    // Update camera settings while keeping downward angle
+    this.cameraTarget.set(center.x, center.y, center.z);
+    this.cameraDistance = Math.max(2, Math.min(8, fitDistance));
+    this.updateCameraPosition();
+  }
+
   public setPlantData(data: PlantData) {
     console.log('setPlantData starting:', {
       roots: data.roots.size,
@@ -245,12 +263,9 @@ export class ViewEngine {
       }
     });
 
-    console.log('Centering and scaling plant group...');
-    // Center and scale plant group after rendering
-    const box = new THREE.Box3().setFromObject(this.plantGroup);
-    const center = box.getCenter(new THREE.Vector3());
-    const size = box.getSize(new THREE.Vector3());
-    const maxDim = Math.max(size.x, size.y, size.z);
+    // Fit camera to plant after rendering
+    console.log('Fitting camera to plant...');
+    this.fitToPlant();
     
     console.log('Plant positioned at:', this.plantGroup.position.toArray());
 
@@ -405,16 +420,13 @@ export class ViewEngine {
         length: bone.length
       });
 
-      const material = new THREE.MeshStandardMaterial({ 
+      const material = new THREE.MeshPhongMaterial({ 
         color: attributes.color,
-        roughness: 0.7,
-        metalness: 0.2,
+        shininess: 30,
         side: part.type === 'leaf' || part.type === 'flower' ? THREE.DoubleSide : THREE.FrontSide
       });
 
       const mesh = new THREE.Mesh(geometry, material);
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
       mesh.frustumCulled = false;
       mesh.userData.boneId = boneId;
       mesh.userData.bodyId = body.id;
@@ -427,16 +439,14 @@ export class ViewEngine {
         
         // Create eyes with flat shading
         const eyeGeo = new THREE.SphereGeometry(bone.width * 0.4, 12, 8);
-        const eyeMat = new THREE.MeshStandardMaterial({ 
+        const eyeMat = new THREE.MeshPhongMaterial({ 
           color: '#ffffff',
-          roughness: 0.7,
-          metalness: 0.2,
+          shininess: 50,
         });
         const pupilGeo = new THREE.SphereGeometry(bone.width * 0.2, 8, 8);
-        const pupilMat = new THREE.MeshStandardMaterial({ 
+        const pupilMat = new THREE.MeshPhongMaterial({ 
           color: '#000000',
-          roughness: 0.7,
-          metalness: 0.2,
+          shininess: 0,
         });
         
         // Left eye with better positioning
