@@ -600,4 +600,44 @@ export class ViewEngine {
   public isDisposed(): boolean {
     return this.isDisposing;
   }
+
+  public getPlantHeadPosition(): { x: number, y: number } | null {
+    // Find the head bone (last bone of the main stem)
+    const mainStemPart = Array.from(this.parts.values())
+      .find(part => part.type === 'stem' && this.roots.has(part.id));
+    
+    if (!mainStemPart) return null;
+
+    // Get the last bone of the stem
+    const lastBoneId = mainStemPart.boneIds[mainStemPart.boneIds.length - 1];
+    const lastBoneTransform = this.boneTransforms.get(lastBoneId);
+    
+    if (!lastBoneTransform) return null;
+
+    // Get position from transform
+    const position = new THREE.Vector3();
+    position.setFromMatrixPosition(lastBoneTransform);
+    position.y += 1; // Move up a bit for better bubble placement
+
+    // Project to screen coordinates
+    const screenPosition = position.clone();
+    screenPosition.project(this.camera);
+
+    // Convert to pixel coordinates
+    const x = (screenPosition.x + 1) * this.gl.drawingBufferWidth / 2;
+    const y = (-screenPosition.y + 1) * this.gl.drawingBufferHeight / 2;
+
+    return { x, y };
+  }
+
+  public forceRender() {
+    if (!this.scene || !this.renderer || this.isDisposed() || this.isDisposing) return;
+    
+    try {
+      this.renderer.render(this.scene, this.camera);
+      this.gl.endFrameEXP();
+    } catch (error) {
+      console.error('Error in forceRender:', error);
+    }
+  }
 } 
