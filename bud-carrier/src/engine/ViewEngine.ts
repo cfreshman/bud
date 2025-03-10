@@ -8,7 +8,7 @@ export class ViewEngine {
   protected camera: THREE.PerspectiveCamera;
   protected renderer: Renderer;
   protected plantGroup: THREE.Group;
-  protected animationFrame: number | null = null;
+  protected animationFrameId: number | null = null;
   protected gl: ExpoWebGLRenderingContext;
   protected boneTransforms: Map<string, THREE.Matrix4> = new Map();
   protected bonePartIds: Map<string, string> = new Map();
@@ -29,119 +29,50 @@ export class ViewEngine {
   protected cameraDistance = 5;
   protected cameraTarget = new THREE.Vector3(0, 1, 0);
 
+  protected hasBasicSetup: boolean = false;
+
   constructor(gl: ExpoWebGLRenderingContext) {
-    console.log('ViewEngine constructor starting');
+    console.log('ViewEngine constructor starting...');
     this.gl = gl;
+
+    const width = gl.drawingBufferWidth;
+    const height = gl.drawingBufferHeight;
     
-    // Get dimensions and validate
-    const { drawingBufferWidth: width, drawingBufferHeight: height } = gl;
-    console.log('GL dimensions:', { width, height });
+    // Create renderer
+    this.renderer = new Renderer({ gl });
+    this.renderer.setSize(width, height);
+    this.renderer.setClearColor('#88aa99');
     
-    if (!width || !height) {
-      throw new Error('Invalid GL dimensions');
-    }
-    
-    // Initialize Three.js scene
+    // Create scene
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color('#88aa99');
-    console.log('Scene created with background:', this.scene.background);
-
-    // Initialize camera with valid aspect ratio
-    this.camera = new THREE.PerspectiveCamera(
-      40,
-      width / height,
-      0.1,
-      1000
-    );
     
-    // Initialize renderer with correct viewport
-    console.log('Creating renderer...');
-    this.renderer = new Renderer({
-      gl,
-      width: width,
-      height: height,
-      antialias: false,
-      pixelRatio: 0.5,
-    });
+    // Create camera
+    this.camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 1000);
     
-    // Set viewport to full dimensions (not render dimensions)
-    gl.viewport(0, 0, width, height);
-    
-    this.renderer.setClearColor('#88aa99', 1);
-    
-    // Update camera aspect to match display dimensions
-    this.camera.aspect = width / height;
-    this.camera.updateProjectionMatrix();
-    
-    const color = new THREE.Color();
-    this.renderer.getClearColor(color);
-    console.log('Renderer created with clear color:', color);
-
     // Create plant group
     this.plantGroup = new THREE.Group();
     this.scene.add(this.plantGroup);
-    console.log('Plant group added to scene');
-
-    // Add stronger lighting
-    const ambientLight = new THREE.AmbientLight(0xffffff, 2.2);
-    this.scene.add(ambientLight);
-
-    // Add directional light with reduced shadow quality for performance
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 2.2);
-    directionalLight.position.set(2, 4, 2);
-    this.scene.add(directionalLight);
-    console.log('Lights added to scene');
-
-    // Add ground - green
-    const groundGeo = new THREE.CircleGeometry(2, 32);
-    const groundMat = new THREE.MeshPhongMaterial({ 
-      color: '#bbddbb',
-      shininess: 0
-    });
-    const ground = new THREE.Mesh(groundGeo, groundMat);
-    ground.rotation.x = -Math.PI / 2;
-    this.scene.add(ground);
-    console.log('Ground added to scene');
-
-    // Add pot
-    const potGeo = new THREE.CylinderGeometry(0.6, 0.4, 0.4, 32);
-    const potMat = new THREE.MeshPhongMaterial({ 
-      color: '#8B5E3C',
-      shininess: 10
-    });
-    const pot = new THREE.Mesh(potGeo, potMat);
-    pot.position.y = 0.2;
-    this.scene.add(pot);
-    console.log('Pot added to scene');
-
-    // Add dirt
-    const dirtGeo = new THREE.SphereGeometry(0.55, 32, 16);
-    const dirtMat = new THREE.MeshPhongMaterial({
-      color: '#5C4033',
-      shininess: 0
-    });
-    const dirt = new THREE.Mesh(dirtGeo, dirtMat);
-    dirt.scale.y = 0.3;
-    dirt.position.y = 0.35;
-    this.scene.add(dirt);
-    console.log('Dirt added to scene');
-
-    // Update initial camera position for better view
-    this.cameraDistance = 4; // Closer view
-    this.cameraTarget.set(0, 0.8, 0); // Look at middle of plant
-    this.targetRotation.set(Math.PI / 2, 0); // Angled view from front
+    
+    // Set initial camera position - directly in front
+    this.camera.position.set(5, 0, 0);
+    this.camera.lookAt(0, 1, 0);
+    this.targetRotation.set(Math.PI / 2 * .95, 0);  // Reset rotation
+    this.cameraTarget.set(0, 1, 0);    // Look at center
     this.updateCameraPosition();
     console.log('Initial camera position:', this.camera.position.toArray());
 
-    // Start animation
-    console.log('Starting animation loop');
-    this.animate();
-    console.log('ViewEngine constructor complete');
-
-    // Force initial render
+    // Force render
     this.renderer.render(this.scene, this.camera);
     this.gl.endFrameEXP();
-    console.log('Initial render complete, scene children:', this.scene.children.length);
+
+    // Start animation loop with delay to ensure GL context is ready
+    setTimeout(() => {
+      console.log('Starting animation loop...');
+      this.animate();
+    }, 100);
+
+    console.log('ViewEngine constructor complete');
   }
 
   // Update camera position based on rotation and distance
@@ -160,8 +91,10 @@ export class ViewEngine {
   // Handle touch input for camera control
   public onTouchMove(dx: number, dy: number) {
     const sensitivity = 0.01;
-    this.targetRotation.x += dx * sensitivity;
-    this.targetRotation.y = Math.max(-Math.PI/3, Math.min(Math.PI/3, this.targetRotation.y + dy * sensitivity));
+    // Limit horizontal rotation more
+    this.targetRotation.x = Math.max(-Math.PI/6, Math.min(Math.PI/6, this.targetRotation.x + dx * sensitivity));
+    // Limit vertical rotation more
+    this.targetRotation.y = Math.max(-Math.PI/6, Math.min(Math.PI/6, this.targetRotation.y + dy * sensitivity));
     this.updateCameraPosition();
     
     // Force render after camera move
@@ -172,7 +105,8 @@ export class ViewEngine {
   // Handle pinch input for zoom
   public onPinch(scale: number) {
     const sensitivity = 0.05;
-    this.cameraDistance = Math.max(2, Math.min(4, this.cameraDistance * (1 + (1 - scale) * sensitivity)));
+    // Adjust zoom limits for closer view
+    this.cameraDistance = Math.max(3, Math.min(7, this.cameraDistance * (1 + (1 - scale) * sensitivity)));
     this.updateCameraPosition();
     
     // Force render after camera move
@@ -180,16 +114,33 @@ export class ViewEngine {
     this.gl.endFrameEXP();
   }
 
-  private animate = () => {
-    if (this.isDisposing) return;
-    this.animationFrame = requestAnimationFrame(this.animate);
-
+  protected animate = () => {
+    if (this.isDisposed() || this.isDisposing) {
+      console.log('Animation stopped - engine disposed');
+      return;
+    }
+    
+    this.animationFrameId = requestAnimationFrame(this.animate);
+    if (!this.scene || !this.renderer) {
+      console.log('Animation frame skipped - missing scene or renderer');
+      return;
+    }
+    
     try {
-      // Only render, no need to rebuild meshes every frame
-      this.renderer.render(this.scene, this.camera);
-      this.gl.endFrameEXP();
+      // // Log scene contents
+      // console.log('Rendering frame:', {
+      //   sceneChildren: this.scene.children.length,
+      //   plantGroupChildren: this.plantGroup.children.length,
+      //   cameraPosition: this.camera.position.toArray(),
+      //   hasBasicSetup: this.hasBasicSetup
+      // });
+
+      if (this.hasBasicSetup) {
+        this.renderer.render(this.scene, this.camera);
+        this.gl.endFrameEXP();
+      }
     } catch (error) {
-      console.error('Error in render:', error);
+      console.error('Error in ViewEngine animation loop:', error);
     }
   };
 
@@ -249,6 +200,47 @@ export class ViewEngine {
     this.boneTransforms.clear();
     this.bonePartIds.clear();
 
+    if (!this.hasBasicSetup) {
+      // Add lights
+      const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+      this.scene.add(ambientLight);
+      
+      const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0);
+      directionalLight.position.set(0, 5, 5);  // Move light to front
+      this.scene.add(directionalLight);
+      
+      // Add ground plane for visibility
+      const groundGeometry = new THREE.PlaneGeometry(10, 10);
+      const groundMaterial = new THREE.MeshBasicMaterial({ 
+        color: '#bbddbb'
+      });
+      const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+      ground.rotation.x = -Math.PI / 2;
+      this.scene.add(ground);
+
+      // Add pot and dirt mound
+      // const potGeo = new THREE.CylinderGeometry(0.6, 0.4, 0.4, 8);
+      // const potMat = new THREE.MeshBasicMaterial({ 
+      //   color: '#8B5E3C'
+      // });
+      // const pot = new THREE.Mesh(potGeo, potMat);
+      // pot.position.y = 0.2;
+      // this.scene.add(pot);
+
+      // Add dirt mound
+      const dirtGeo = new THREE.SphereGeometry(0.5, 8, 8);
+      const dirtMat = new THREE.MeshBasicMaterial({ 
+        color: '#5C4033'
+      });
+      const dirt = new THREE.Mesh(dirtGeo, dirtMat);
+      dirt.scale.y = 0.3;
+      dirt.position.y = 0.35;
+      this.scene.add(dirt);
+
+      this.hasBasicSetup = true;
+      console.log('Basic setup complete');
+    }
+
     console.log('Rendering root parts:', Array.from(this.roots));
     // Render all root parts
     Array.from(this.roots).forEach(rootId => {
@@ -264,8 +256,6 @@ export class ViewEngine {
     console.log('Fitting camera to plant...');
     this.fitToPlant();
     
-    console.log('Plant positioned at:', this.plantGroup.position.toArray());
-
     console.log('Forcing render...');
     // Force a render
     this.renderer.render(this.scene, this.camera);
@@ -417,14 +407,12 @@ export class ViewEngine {
         length: bone.length
       });
 
-      const material = new THREE.MeshPhongMaterial({ 
+      const material = new THREE.MeshBasicMaterial({ 
         color: attributes.color,
-        shininess: 30,
-        side: part.type === 'leaf' || part.type === 'flower' ? THREE.DoubleSide : THREE.FrontSide
       });
 
       const mesh = new THREE.Mesh(geometry, material);
-      mesh.frustumCulled = false;
+      // mesh.frustumCulled = false;
       mesh.userData.boneId = boneId;
       mesh.userData.bodyId = body.id;
       mesh.userData.partId = part.id;
@@ -436,14 +424,12 @@ export class ViewEngine {
         
         // Create eyes with flat shading
         const eyeGeo = new THREE.SphereGeometry(bone.width * 0.4, 12, 8);
-        const eyeMat = new THREE.MeshPhongMaterial({ 
+        const eyeMat = new THREE.MeshBasicMaterial({ 
           color: '#ffffff',
-          shininess: 50,
         });
         const pupilGeo = new THREE.SphereGeometry(bone.width * 0.2, 8, 8);
-        const pupilMat = new THREE.MeshPhongMaterial({ 
+        const pupilMat = new THREE.MeshBasicMaterial({ 
           color: '#000000',
-          shininess: 0,
         });
         
         // Left eye with better positioning
@@ -596,13 +582,19 @@ export class ViewEngine {
   }
 
   public dispose() {
-    if (this.animationFrame !== null) {
-      cancelAnimationFrame(this.animationFrame);
+    console.log('Disposing ViewEngine');
+    this.isDisposing = true;
+    
+    if (this.animationFrameId !== null) {
+      console.log('Canceling animation frame:', this.animationFrameId);
+      cancelAnimationFrame(this.animationFrameId);
+      this.animationFrameId = null;
     }
     
     this.scene.clear();
     this.renderer.dispose();
     this.gl.endFrameEXP();
+    console.log('ViewEngine disposed');
   }
 
   public isDisposed(): boolean {

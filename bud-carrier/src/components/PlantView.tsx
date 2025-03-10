@@ -5,6 +5,8 @@ import { ViewEngine } from '../engine/ViewEngine';
 import { PlantData } from '../engine/types';
 import { AppText } from './AppText';
 import { LoadingScreen } from './LoadingScreen';
+import * as THREE from 'three';
+import { Renderer } from 'expo-three';
 
 interface PlantViewProps {
   plant?: PlantData;
@@ -17,6 +19,7 @@ export function PlantView({ plant }: PlantViewProps) {
   const [isFirstRenderComplete, setIsFirstRenderComplete] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const window = Dimensions.get('window');
+  const [hasEngine, setHasEngine] = useState(false);
 
   // Log when component mounts and unmounts
   useEffect(() => {
@@ -107,11 +110,20 @@ export function PlantView({ plant }: PlantViewProps) {
     setError(null);
     
     try {
+      // Configure GL context
+      gl.enable(gl.DEPTH_TEST);
+      gl.enable(gl.CULL_FACE);
+      gl.cullFace(gl.BACK);
+      console.log('GL context configured');
+
+      // Wait for next frame to ensure GL context is ready
+      await new Promise(resolve => requestAnimationFrame(resolve));
+      
       console.log('Initializing ViewEngine...');
       engineRef.current = new ViewEngine(gl);
+      setHasEngine(true);
       console.log('ViewEngine initialized');
       
-      // Always try to set plant data immediately after engine creation
       if (plant) {
         console.log('Setting initial plant data in ViewEngine');
         engineRef.current.setPlantData(plant);
@@ -119,9 +131,7 @@ export function PlantView({ plant }: PlantViewProps) {
         setIsFirstRenderComplete(true);
       }
       
-      // Only complete loading if we either have no plant, or have finished loading the plant
       setIsLoading(!plant || isFirstRenderComplete);
-      console.log('Loading set to:', !plant || isFirstRenderComplete);
     } catch (error) {
       console.error('Error in PlantView initialization:', error);
       setError('Failed to initialize plant view');
@@ -148,7 +158,7 @@ export function PlantView({ plant }: PlantViewProps) {
         setError('Failed to update plant');
       }
     }
-  }, [plant]);
+  }, [plant, hasEngine]);
 
   // Log state changes
   useEffect(() => {
@@ -162,6 +172,7 @@ export function PlantView({ plant }: PlantViewProps) {
         console.log('Disposing engine');
         engineRef.current.dispose();
         engineRef.current = null;
+        setHasEngine(false);
       }
     };
   }, []);
