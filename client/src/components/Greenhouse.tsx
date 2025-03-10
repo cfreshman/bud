@@ -5,6 +5,7 @@ import { deserializePlantData } from '../utils/plantSaveUtils'
 import { PlotMenu } from './PlotMenu'
 import { ChatView } from './ChatView'
 import { removeToken } from '../services/auth'
+import { carryPlant, uncarryPlant } from '../services/api'
 
 interface GreenhouseProps {
   plants: Map<number, PlantData>
@@ -19,13 +20,20 @@ export function Greenhouse({ plants, onSelectPlot, onStartChat, onLogout }: Gree
   const cleanupRef = useRef(false)
   const [menuState, setMenuState] = useState<{ position: { x: number, y: number }, plotIndex: number } | null>(null)
   const [chatState, setChatState] = useState<{ plant: PlantData } | null>(null)
+  const [carriedPlotIndex, setCarriedPlotIndex] = useState<number | null>(null)
   
   // Store callback in ref to avoid effect dependency
   const onSelectPlotRef = useRef(onSelectPlot)
   onSelectPlotRef.current = onSelectPlot
 
   // Create click handler with access to current plants
-  const handlePlotClick = useCallback((plotIndex: number) => {
+  const handlePlotClick = useCallback((plotIndex: number | null) => {
+    // If clicking outside plots, just close the menu
+    if (plotIndex === null) {
+      setMenuState(null)
+      return
+    }
+
     // If plot is empty, go directly to edit mode
     if (!plants.has(plotIndex)) {
       onSelectPlotRef.current(plotIndex)
@@ -51,23 +59,13 @@ export function Greenhouse({ plants, onSelectPlot, onStartChat, onLogout }: Gree
     // Create new engine
     engineRef.current = new ViewEngine(containerRef.current, handlePlotClick)
 
-    // Load plants into plots
-    // First try to load from localStorage
-    for (let i = 0; i < 6; i++) {
-      try {
-        const savedPlantStr = localStorage.getItem(`greenhouse_plot_${i}`)
-        if (savedPlantStr) {
-          const plantData = deserializePlantData(savedPlantStr)
-          engineRef.current.setPlantInPlot(i, plantData)
-        }
-      } catch (error) {
-        console.error(`Failed to load plot ${i}:`, error)
-      }
-    }
-
-    // Then apply any plants from props (these would be more recent)
+    // Load plants into plots and find carried plant
     plants.forEach((plantData, plotIndex) => {
       engineRef.current?.setPlantInPlot(plotIndex, plantData)
+      if (plantData.isCarried) {
+        setCarriedPlotIndex(plotIndex)
+        engineRef.current?.setCarriedPlot(plotIndex)
+      }
     })
   }, [handlePlotClick, plants])
 
@@ -101,12 +99,42 @@ export function Greenhouse({ plants, onSelectPlot, onStartChat, onLogout }: Gree
     }, 0)
   }, [initializeEngine])
 
+  const handleCarryPlant = async (plotIndex: number) => {
+    try {
+      const plant = plants.get(plotIndex)
+      if (!plant) return
+
+      if (carriedPlotIndex === plotIndex) {
+        await uncarryPlant(plotIndex.toString())
+        setCarriedPlotIndex(null)
+        engineRef.current?.setCarriedPlot(null)
+      } else {
+        await carryPlant(plotIndex.toString())
+        setCarriedPlotIndex(plotIndex)
+        engineRef.current?.setCarriedPlot(plotIndex)
+      }
+    } catch (error) {
+      console.error('Failed to carry/uncarry plant:', error)
+    }
+  }
+
+  // Update carried plot visual when component mounts/unmounts
+  useEffect(() => {
+    if (engineRef.current && carriedPlotIndex !== null) {
+      engineRef.current.setCarriedPlot(carriedPlotIndex)
+    }
+    return () => {
+      engineRef.current?.setCarriedPlot(null)
+    }
+  }, [carriedPlotIndex])
+
   // Show ChatView when chatState is set
   if (chatState) {
     return (
       <ChatView 
         plant={chatState.plant}
         onClose={handleChatClose}
+        plotIndex={menuState?.plotIndex || 0}
       />
     )
   }
@@ -138,6 +166,7 @@ export function Greenhouse({ plants, onSelectPlot, onStartChat, onLogout }: Gree
           {menuState && (
             <PlotMenu
               position={menuState.position}
+              isCarried={carriedPlotIndex === menuState.plotIndex}
               onSelect={(action) => {
                 if (action === 'edit') {
                   onSelectPlotRef.current(menuState.plotIndex)
@@ -150,6 +179,8 @@ export function Greenhouse({ plants, onSelectPlot, onStartChat, onLogout }: Gree
                       setChatState({ plant })
                     }
                   }
+                } else if (action === 'carry') {
+                  handleCarryPlant(menuState.plotIndex)
                 }
                 setMenuState(null)
               }}

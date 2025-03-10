@@ -53,4 +53,5 @@ export interface PlantData {
   bones: Map<string, Bone>
   bodies: Map<string, Body>
   roots: Set<string>
+  isCarried?: boolean
 } 

@@ -16,6 +16,14 @@ const plantSchema = new mongoose.Schema({
   serializedPlant: {
     type: String,
     required: true
+  },
+  isCarried: {
+    type: Boolean,
+    default: false
+  },
+  lastCarriedAt: {
+    type: Date,
+    default: null
   }
 })
 

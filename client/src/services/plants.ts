@@ -17,7 +17,10 @@ export async function savePlant(plotIndex: number, plantData: PlantData): Promis
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`
     },
-    body: JSON.stringify({ serializedPlant: serializePlantData(plantData) })
+    body: JSON.stringify({ 
+      serializedPlant: serializePlantData(plantData),
+      isCarried: plantData.isCarried || false
+    })
   })
 
   if (!response.ok) {
@@ -44,11 +47,13 @@ export async function loadPlants(): Promise<Map<number, PlantData>> {
   const plants = await response.json()
   return new Map(
     Object.entries(plants).map(([key, value]) => {
-      const serverValue = value as ServerResponse
+      const serverValue = value as { serializedPlant: string, isCarried: boolean }
       if (!serverValue.serializedPlant) {
         throw new Error('Invalid plant data received from server')
       }
-      return [parseInt(key), deserializePlantData(serverValue.serializedPlant)]
+      const plantData = deserializePlantData(serverValue.serializedPlant)
+      plantData.isCarried = serverValue.isCarried
+      return [parseInt(key), plantData]
     })
   )
 }

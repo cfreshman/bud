@@ -5,7 +5,7 @@ import { PlantData } from './types'
 export class ViewEngine extends EngineUtils {
   private plots: THREE.Group[] = []
   private selectedPlot: number = -1
-  private onSelectPlot: (plotIndex: number) => void
+  private onSelectPlot: (plotIndex: number | null) => void
   private activePlots = new Map<number, PlantData>()
   private mouseDown = false
   private isDragging = false
@@ -14,7 +14,7 @@ export class ViewEngine extends EngineUtils {
   private boundMouseMove: (event: MouseEvent) => void = () => {}
   private boundMouseUp: () => void = () => {}
 
-  constructor(container: HTMLElement, onSelectPlot: (plotIndex: number) => void) {
+  constructor(container: HTMLElement, onSelectPlot: (plotIndex: number | null) => void) {
     super(container)
     this.onSelectPlot = onSelectPlot
 
@@ -153,8 +153,9 @@ export class ViewEngine extends EngineUtils {
     }
     
     const onMouseUp = () => {
-      if (this.mouseDown && !this.isDragging && this.selectedPlot !== -1) {
-        this.onSelectPlot(this.selectedPlot)
+      if (this.mouseDown && !this.isDragging) {
+        // Pass null if no plot is selected, otherwise pass the selected plot index
+        this.onSelectPlot(this.selectedPlot === -1 ? null : this.selectedPlot)
       }
       this.mouseDown = false
       this.isDragging = false
@@ -198,6 +199,29 @@ export class ViewEngine extends EngineUtils {
     } else {
       // Clear from active plots
       this.activePlots.delete(plotIndex)
+    }
+  }
+
+  setCarriedPlot(plotIndex: number | null) {
+    // Reset all plots to normal appearance
+    this.plots.forEach((plot, index) => {
+      const potMesh = plot.children.find(child => child instanceof THREE.Mesh) as THREE.Mesh
+      if (potMesh && potMesh.material instanceof THREE.MeshStandardMaterial) {
+        potMesh.material.color.setHex(0x8B5E3C)
+        potMesh.material.opacity = 0.6
+      }
+    })
+
+    // Highlight carried plot
+    if (plotIndex !== null) {
+      const plot = this.plots[plotIndex]
+      if (!plot) return
+
+      const potMesh = plot.children.find(child => child instanceof THREE.Mesh) as THREE.Mesh
+      if (potMesh && potMesh.material instanceof THREE.MeshStandardMaterial) {
+        potMesh.material.color.setHex(0xFFD700) // Gold color
+        potMesh.material.opacity = 0.8
+      }
     }
   }
 

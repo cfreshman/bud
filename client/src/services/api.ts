@@ -51,4 +51,30 @@ export async function sendMessageToPlant(
     console.error('Error sending message to plant:', error);
     return 'Sorry, I am having trouble responding right now.';
   }
+}
+
+export async function carryPlant(plantId: string): Promise<void> {
+  const response = await fetch(`${API_URL}/plants/${plantId}/carry`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${getToken()}`
+    }
+  })
+
+  if (!response.ok) {
+    throw new Error('Failed to carry plant')
+  }
+}
+
+export async function uncarryPlant(plantId: string): Promise<void> {
+  const response = await fetch(`${API_URL}/plants/${plantId}/uncarry`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${getToken()}`
+    }
+  })
+
+  if (!response.ok) {
+    throw new Error('Failed to uncarry plant')
+  }
 } 

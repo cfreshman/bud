@@ -13,7 +13,8 @@ router.get('/', auth, async (req, res) => {
     const plantsMap = {}
     plants.forEach(plant => {
       plantsMap[plant.plotIndex] = {
-        serializedPlant: plant.serializedPlant
+        serializedPlant: plant.serializedPlant,
+        isCarried: plant.isCarried || false
       }
     })
     
@@ -37,7 +38,8 @@ router.put('/:plotIndex', auth, async (req, res) => {
       { 
         userId: req.user.userId,
         plotIndex,
-        serializedPlant: req.body.serializedPlant
+        serializedPlant: req.body.serializedPlant,
+        isCarried: req.body.isCarried || false
       },
       { upsert: true, new: true }
     )
@@ -150,6 +152,66 @@ router.delete('/:plotIndex/chat', auth, async (req, res) => {
   } catch (error) {
     console.error('Failed to delete chat history:', error)
     res.status(500).json({ message: 'error deleting chat history' })
+  }
+})
+
+// Start carrying a plant
+router.post('/:plotIndex/carry', auth, async (req, res) => {
+  try {
+    const plotIndex = parseInt(req.params.plotIndex)
+    if (isNaN(plotIndex) || plotIndex < 0 || plotIndex > 5) {
+      return res.status(400).json({ message: 'invalid plot index' })
+    }
+
+    // First uncarry any currently carried plant
+    await Plant.updateMany(
+      { userId: req.user.userId, isCarried: true },
+      { isCarried: false }
+    )
+
+    // Then carry the selected plant
+    const plant = await Plant.findOneAndUpdate(
+      { userId: req.user.userId, plotIndex },
+      { 
+        isCarried: true,
+        lastCarriedAt: new Date()
+      },
+      { new: true }
+    )
+
+    if (!plant) {
+      return res.status(404).json({ message: 'plant not found' })
+    }
+
+    res.json({ message: 'plant is now being carried' })
+  } catch (error) {
+    console.error('Failed to carry plant:', error)
+    res.status(500).json({ message: 'error carrying plant' })
+  }
+})
+
+// Stop carrying a plant
+router.post('/:plotIndex/uncarry', auth, async (req, res) => {
+  try {
+    const plotIndex = parseInt(req.params.plotIndex)
+    if (isNaN(plotIndex) || plotIndex < 0 || plotIndex > 5) {
+      return res.status(400).json({ message: 'invalid plot index' })
+    }
+
+    const plant = await Plant.findOneAndUpdate(
+      { userId: req.user.userId, plotIndex },
+      { isCarried: false },
+      { new: true }
+    )
+
+    if (!plant) {
+      return res.status(404).json({ message: 'plant not found' })
+    }
+
+    res.json({ message: 'plant is no longer being carried' })
+  } catch (error) {
+    console.error('Failed to uncarry plant:', error)
+    res.status(500).json({ message: 'error uncarrying plant' })
   }
 })
 

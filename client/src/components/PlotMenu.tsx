@@ -2,11 +2,12 @@ import React from 'react'
 
 interface PlotMenuProps {
   position: { x: number, y: number }
-  onSelect: (action: 'chat' | 'edit') => void
+  onSelect: (action: 'chat' | 'edit' | 'carry') => void
   onClose: () => void
+  isCarried?: boolean
 }
 
-export function PlotMenu({ position, onSelect, onClose }: PlotMenuProps) {
+export function PlotMenu({ position, onSelect, onClose, isCarried = false }: PlotMenuProps) {
   return (
     <>
       <div 
@@ -32,6 +33,12 @@ export function PlotMenu({ position, onSelect, onClose }: PlotMenuProps) {
           onClick={() => onSelect('edit')}
         >
           edit
+        </button>
+        <button
+          className="plot-menu-item"
+          onClick={() => onSelect('carry')}
+        >
+          {isCarried ? 'uncarry' : 'carry'}
         </button>
       </div>
     </>
