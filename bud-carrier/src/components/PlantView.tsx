@@ -372,13 +372,13 @@ export function PlantView({ plant, plotIndex = 0 }: PlantViewProps) {
               styles.speechBubble,
               {
                 left: speechBubblePosition.x,
-                top: speechBubblePosition.y - 50, // Reduce upward offset
+                top: speechBubblePosition.y - 50,
                 opacity: speechBubbleOpacity,
                 transform: [
-                  { translateX: -50 }, // Center by moving left 50% of width
+                  { translateX: -50 },
                 ],
-                borderWidth: 2, // Debug border
-                borderColor: 'red' // Debug border
+                borderWidth: 2,
+                borderColor: 'red'
               }
             ]}
           >
@@ -395,76 +395,6 @@ export function PlantView({ plant, plotIndex = 0 }: PlantViewProps) {
             <AppText style={styles.historyButtonText}>history</AppText>
           </TouchableOpacity>
         </SafeAreaView>
-
-        {/* Chat input overlay - hide when history is shown */}
-        {!showHistory && (
-          <SafeAreaView 
-            style={styles.chatOverlay}
-            edges={['bottom']}
-          >
-            {/* Last two messages */}
-            {messages.length > 0 && (
-              <View style={styles.lastMessagesContainer}>
-                {messages.slice(-2).map((msg, i) => (
-                  <View key={msg.id} style={[
-                    styles.lastMessage,
-                    msg.sender === 'plant' ? styles.plantLastMessage : styles.userLastMessage
-                  ]}>
-                    <AppText style={msg.sender === 'plant' ? styles.lastMessageText : styles.userMessageText}>
-                      {msg.content}
-                    </AppText>
-                  </View>
-                ))}
-              </View>
-            )}
-            
-            <View style={styles.inputContainer}>
-              <TextInput
-                style={styles.input}
-                value={input}
-                onChangeText={value => {
-                  if (value.includes('\n')) {
-                    handleSend();
-                  } else {
-                    setInput(value);
-                  }
-                }}
-                placeholder={isMessageLoading ? "plant is thinking..." : "type a message..."}
-                placeholderTextColor="#666666"
-                onSubmitEditing={handleSend}
-                editable={!isMessageLoading}
-                returnKeyType="send"
-                blurOnSubmit={false}
-                multiline
-                autoCapitalize="none"
-              />
-            </View>
-          </SafeAreaView>
-        )}
-
-        {/* History overlay */}
-        {showHistory && (
-          <SafeAreaView style={styles.historyOverlay} edges={['top', 'bottom']}>
-            <View style={styles.historyContent}>
-              <View style={styles.historyHeader}>
-                <AppText style={styles.historyTitle}>history</AppText>
-                <TouchableOpacity 
-                  style={styles.closeButton}
-                  onPress={() => setShowHistory(false)}
-                >
-                  <AppText style={styles.closeButtonText}>×</AppText>
-                </TouchableOpacity>
-              </View>
-              <ScrollView style={styles.historyMessages}>
-                {messages.map(msg => (
-                  <View key={msg.id} style={[styles.messageRow, msg.sender === 'plant' && styles.plantMessage]}>
-                    <AppText style={styles.messageText}>{msg.content}</AppText>
-                  </View>
-                ))}
-              </ScrollView>
-            </View>
-          </SafeAreaView>
-        )}
 
         {/* Loading and error overlays */}
         {isLoading && (
@@ -492,6 +422,82 @@ export function PlantView({ plant, plotIndex = 0 }: PlantViewProps) {
           </View>
         )}
       </View>
+
+      {/* Chat input overlay - hide when history is shown */}
+      {!showHistory && (
+        <SafeAreaView 
+          style={styles.chatOverlay}
+          edges={['bottom']}
+        >
+          {/* Last two messages */}
+          {messages.length > 0 && (
+            <View style={styles.lastMessagesContainer}>
+              {messages.slice(-2).map((msg, i) => (
+                <View key={msg.id} style={[
+                  styles.lastMessage,
+                  msg.sender === 'plant' ? styles.plantLastMessage : styles.userLastMessage
+                ]}>
+                  <AppText style={msg.sender === 'plant' ? styles.lastMessageText : styles.userMessageText}>
+                    {msg.content}
+                  </AppText>
+                </View>
+              ))}
+            </View>
+          )}
+          
+          <View style={styles.inputContainer}>
+            <TextInput
+              style={styles.input}
+              value={input}
+              onChangeText={value => {
+                if (value.includes('\n')) {
+                  handleSend();
+                } else {
+                  setInput(value);
+                }
+              }}
+              placeholder={isMessageLoading ? "plant is thinking..." : "type a message..."}
+              placeholderTextColor="#666666"
+              onSubmitEditing={handleSend}
+              editable={!isMessageLoading}
+              returnKeyType="send"
+              blurOnSubmit={false}
+              multiline
+              autoCapitalize="none"
+            />
+          </View>
+        </SafeAreaView>
+      )}
+
+      {/* History overlay */}
+      {showHistory && (
+        <SafeAreaView style={styles.historyOverlay} edges={['top', 'bottom']}>
+          <View style={styles.historyContent}>
+            <View style={styles.historyHeader}>
+              <AppText style={styles.historyTitle}>history</AppText>
+              <TouchableOpacity 
+                style={styles.closeButton}
+                onPress={() => setShowHistory(false)}
+              >
+                <AppText style={styles.closeButtonText}>×</AppText>
+              </TouchableOpacity>
+            </View>
+            <ScrollView 
+              ref={scrollViewRef}
+              style={styles.historyMessages}
+              contentContainerStyle={styles.historyMessagesContent}
+              showsVerticalScrollIndicator={false}
+              onContentSizeChange={() => scrollViewRef.current?.scrollToEnd({ animated: false })}
+            >
+              {messages.map(msg => (
+                <View key={msg.id} style={[styles.messageRow, msg.sender === 'plant' && styles.plantMessage]}>
+                  <AppText style={styles.messageText}>{msg.content}</AppText>
+                </View>
+              ))}
+            </ScrollView>
+          </View>
+        </SafeAreaView>
+      )}
     </View>
   );
 }
@@ -574,18 +580,17 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: '#111419ee',
+    backgroundColor: '#111419',
     zIndex: 100,
   },
   historyContent: {
     flex: 1,
-    margin: 16,
+    marginHorizontal: 16,
   },
   historyHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
   },
   historyTitle: {
     fontSize: 18,
@@ -600,6 +605,9 @@ const styles = StyleSheet.create({
   },
   historyMessages: {
     flex: 1,
+  },
+  historyMessagesContent: {
+    paddingBottom: 20,
   },
   messageRow: {
     padding: 8,
