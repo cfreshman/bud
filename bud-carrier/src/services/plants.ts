@@ -9,9 +9,9 @@ interface ServerResponse {
   };
 }
 
-// Load the first available plant
+// Load the carried plant
 export async function loadPlant(): Promise<PlantData | undefined> {
-  console.log('Loading plants from server...');
+  console.log('Loading carried plant from server...');
   const token = await getToken();
   if (!token) {
     console.log('No token found');
@@ -31,21 +31,21 @@ export async function loadPlant(): Promise<PlantData | undefined> {
       throw new Error('Failed to load plants');
     }
 
-    const data = await response.json() as ServerResponse;
-    const plants = Object.values(data);
+    const data = await response.json() as { [key: string]: { serializedPlant: string, isCarried: boolean } };
+    const plants = Object.entries(data);
     console.log('Got plants:', { count: plants.length });
 
-    if (plants.length === 0) {
-      console.log('No plants found');
+    // Find the carried plant
+    const carriedPlant = plants.find(([_, plant]) => plant.isCarried);
+    if (!carriedPlant) {
+      console.log('No carried plant found');
       return undefined;
     }
 
-    // Use the first plant
-    const firstPlant = plants[0];
-    console.log('Using first plant');
-    return deserializePlantData(firstPlant.serializedPlant);
+    console.log('Found carried plant');
+    return deserializePlantData(carriedPlant[1].serializedPlant);
   } catch (error) {
-    console.error('Error loading plant:', error);
+    console.error('Error loading carried plant:', error);
     throw error;
   }
 } 
