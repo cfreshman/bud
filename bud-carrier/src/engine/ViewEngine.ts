@@ -56,16 +56,13 @@ export class ViewEngine {
     
     // Initialize renderer with correct viewport
     console.log('Creating renderer...');
-    this.renderer = new Renderer({ gl });
-    
-    // Reduce resolution by half while keeping display size
-    const pixelRatio = 0.5;
-    const renderWidth = Math.floor(width * pixelRatio);
-    const renderHeight = Math.floor(height * pixelRatio);
-    
-    // Set display size to full dimensions
-    this.renderer.setSize(width, height, false);
-    this.renderer.setPixelRatio(pixelRatio);
+    this.renderer = new Renderer({
+      gl,
+      width: width,
+      height: height,
+      antialias: false,
+      pixelRatio: 0.5,
+    });
     
     // Set viewport to full dimensions (not render dimensions)
     gl.viewport(0, 0, width, height);

@@ -119,8 +119,9 @@ export function PlantView({ plant }: PlantViewProps) {
         setIsFirstRenderComplete(true);
       }
       
-      setIsLoading(false);
-      console.log('Loading set to false');
+      // Only complete loading if we either have no plant, or have finished loading the plant
+      setIsLoading(!plant || isFirstRenderComplete);
+      console.log('Loading set to:', !plant || isFirstRenderComplete);
     } catch (error) {
       console.error('Error in PlantView initialization:', error);
       setError('Failed to initialize plant view');
@@ -141,6 +142,7 @@ export function PlantView({ plant }: PlantViewProps) {
         engineRef.current.setPlantData(plant);
         console.log('Plant data updated in engine');
         setIsFirstRenderComplete(true);
+        setIsLoading(false); // Complete loading after plant is fully loaded
       } catch (error) {
         console.error('Error updating plant data:', error);
         setError('Failed to update plant');
@@ -165,7 +167,13 @@ export function PlantView({ plant }: PlantViewProps) {
   }, []);
 
   // Always render GL view with overlays
-  console.log('Rendering GL view with overlays');
+  console.log('Rendering GL view with overlays', {
+    isLoading,
+    isFirstRenderComplete,
+    hasPlant: !!plant,
+    error
+  });
+
   return (
     <View style={[styles.container, { width: window.width }]}>
       <View {...panResponder.panHandlers} style={styles.fullSize}>
@@ -173,7 +181,7 @@ export function PlantView({ plant }: PlantViewProps) {
           style={[styles.fullSize, { width: window.width }]}
           onContextCreate={onContextCreate}
         />
-        {(isLoading || !isFirstRenderComplete) && (
+        {isLoading && (
           <View style={[styles.fullSize, styles.overlay]}>
             <LoadingScreen />
           </View>
