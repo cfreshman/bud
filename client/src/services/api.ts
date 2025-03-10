@@ -4,13 +4,13 @@ import { getToken } from './auth';
 
 /**
  * Send a message to the plant and get a response
- * @param plantId - The ID of the plant
+ * @param plotIndex - The plot index of the plant
  * @param message - The message to send
  * @param plantData - The plant data to use for personality
  * @returns The plant's response
  */
 export async function sendMessageToPlant(
-  plantId: string,
+  plotIndex: string,
   message: string,
   plantData: PlantData
 ): Promise<string> {
@@ -28,7 +28,7 @@ export async function sendMessageToPlant(
     if (!token) throw new Error('not authenticated');
 
     // Send request to backend
-    const response = await fetch(`${API_URL}/plants/${plantId}/chat`, {
+    const response = await fetch(`${API_URL}/plants/${plotIndex}/chat`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -53,8 +53,8 @@ export async function sendMessageToPlant(
   }
 }
 
-export async function carryPlant(plantId: string): Promise<void> {
-  const response = await fetch(`${API_URL}/plants/${plantId}/carry`, {
+export async function carryPlant(plotIndex: string): Promise<void> {
+  const response = await fetch(`${API_URL}/plants/${plotIndex}/carry`, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${getToken()}`
@@ -66,8 +66,8 @@ export async function carryPlant(plantId: string): Promise<void> {
   }
 }
 
-export async function uncarryPlant(plantId: string): Promise<void> {
-  const response = await fetch(`${API_URL}/plants/${plantId}/uncarry`, {
+export async function uncarryPlant(plotIndex: string): Promise<void> {
+  const response = await fetch(`${API_URL}/plants/${plotIndex}/uncarry`, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${getToken()}`

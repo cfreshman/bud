@@ -122,7 +122,7 @@ export function ChatView({ plant, plotIndex, onClose }: ChatViewProps) {
     }
 
     try {
-      // Get plant's response from API
+      // Get plant's response from API using plotIndex
       const plantResponse = await sendMessageToPlant(plotIndex.toString(), input, plant)
       
       // Add plant message

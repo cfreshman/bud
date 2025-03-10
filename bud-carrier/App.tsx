@@ -16,6 +16,7 @@ export default function App() {
   const [fontError, setFontError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [plant, setPlant] = useState<PlantData | undefined>();
+  const [plotIndex, setPlotIndex] = useState<number | undefined>();
 
   // Load fonts
   useEffect(() => {
@@ -61,19 +62,20 @@ export default function App() {
     async function loadData() {
       console.log('Starting plant load...');
       try {
-        const plantData = await loadPlant();
+        const { plant: plantData, plotIndex: loadedPlotIndex } = await loadPlant();
         console.log('Plant loaded:', {
           hasPlant: !!plantData,
+          plotIndex: loadedPlotIndex,
           roots: plantData?.roots.size,
           parts: plantData?.parts.size,
           bones: plantData?.bones.size,
           bodies: plantData?.bodies.size,
         });
         setPlant(plantData);
+        setPlotIndex(loadedPlotIndex);
       } catch (error) {
         console.error('Failed to load plant:', error);
       } finally {
-        // Always set loading to false when plant load completes
         setIsLoading(false);
       }
     }
@@ -102,7 +104,7 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <View style={styles.container}>
-        <PlantView plant={plant} />
+        <PlantView plant={plant} plotIndex={plotIndex || 0} />
       </View>
     </SafeAreaProvider>
   );

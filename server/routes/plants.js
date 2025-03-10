@@ -13,6 +13,7 @@ router.get('/', auth, async (req, res) => {
     const plantsMap = {}
     plants.forEach(plant => {
       plantsMap[plant.plotIndex] = {
+        plotIndex: plant.plotIndex,
         serializedPlant: plant.serializedPlant,
         isCarried: plant.isCarried || false
       }

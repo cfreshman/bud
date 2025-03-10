@@ -1,28 +1,21 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, StyleSheet, Dimensions, PanResponder, GestureResponderEvent, TextInput, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import { View, StyleSheet, Dimensions, PanResponder, GestureResponderEvent, TextInput, KeyboardAvoidingView, Platform, ScrollView, TouchableOpacity } from 'react-native';
 import { GLView, ExpoWebGLRenderingContext } from 'expo-gl';
 import { ViewEngine } from '../engine/ViewEngine';
 import { PlantData } from '../engine/types';
 import { AppText } from './AppText';
 import { LoadingScreen } from './LoadingScreen';
-import { sendMessageToPlant } from '../services/api';
+import { sendMessageToPlant, Message, loadChatHistory, saveChatHistory } from '../services/api';
 import * as THREE from 'three';
 import { Renderer } from 'expo-three';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-interface Message {
-  id: string;
-  plantId: string;
-  content: string;
-  sender: 'user' | 'plant';
-  timestamp: number;
-}
-
 interface PlantViewProps {
   plant?: PlantData;
+  plotIndex?: number;
 }
 
-export function PlantView({ plant }: PlantViewProps) {
+export function PlantView({ plant, plotIndex = 0 }: PlantViewProps) {
   const engineRef = useRef<ViewEngine | null>(null);
   const lastTouchesRef = useRef<{ [key: string]: { x: number, y: number } }>({});
   const [isLoading, setIsLoading] = useState(true);
@@ -36,6 +29,7 @@ export function PlantView({ plant }: PlantViewProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isMessageLoading, setIsMessageLoading] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
+  const [showHistory, setShowHistory] = useState(false);
 
   // Log when component mounts and unmounts
   useEffect(() => {
@@ -202,14 +196,14 @@ export function PlantView({ plant }: PlantViewProps) {
   });
 
   const handleSend = async () => {
-    if (!input.trim() || !plant?.plantId || isMessageLoading) return;
+    if (!input.trim() || !plant || isMessageLoading) return;
     
     setIsMessageLoading(true);
     
     // Create user message
     const userMessage: Message = {
       id: Math.random().toString(),
-      plantId: plant.plantId,
+      plantId: plant.plantId || '0',
       content: input,
       sender: 'user',
       timestamp: Date.now()
@@ -222,13 +216,13 @@ export function PlantView({ plant }: PlantViewProps) {
       // Add user message to messages
       setMessages(prev => [...prev, userMessage]);
       
-      // Get plant's response
-      const plantResponse = await sendMessageToPlant(plant.plantId, input, plant);
+      // Get plant's response using plotIndex
+      const plantResponse = await sendMessageToPlant(plotIndex.toString(), input, plant);
       
       // Create plant message
       const plantMessage: Message = {
         id: Math.random().toString(),
-        plantId: plant.plantId,
+        plantId: plant.plantId || '0',
         content: plantResponse,
         sender: 'plant',
         timestamp: Date.now()
@@ -244,7 +238,7 @@ export function PlantView({ plant }: PlantViewProps) {
       // Add fallback message if API fails
       const fallbackMessage: Message = {
         id: Math.random().toString(),
-        plantId: plant.plantId,
+        plantId: plant.plantId || '0',
         content: "I'm having trouble understanding right now.",
         sender: 'plant',
         timestamp: Date.now()
@@ -261,6 +255,41 @@ export function PlantView({ plant }: PlantViewProps) {
     }
   };
 
+  // Load chat history when component mounts
+  useEffect(() => {
+    const loadHistory = async () => {
+      if (!plant) return;
+      
+      try {
+        console.log('Loading chat history for plot:', plotIndex);
+        const history = await loadChatHistory(plotIndex.toString());
+        console.log('Loaded chat history:', history.length, 'messages');
+        setMessages(history);
+      } catch (error) {
+        console.error('Error loading chat history:', error);
+      }
+    };
+    
+    loadHistory();
+  }, [plant, plotIndex]);
+
+  // Save messages whenever they change
+  useEffect(() => {
+    const saveHistory = async () => {
+      if (!plant || messages.length === 0) return;
+      
+      try {
+        console.log('Saving chat history:', messages.length, 'messages');
+        await saveChatHistory(plotIndex.toString(), messages);
+        console.log('Chat history saved');
+      } catch (error) {
+        console.error('Error saving chat history:', error);
+      }
+    };
+    
+    saveHistory();
+  }, [messages, plant, plotIndex]);
+
   return (
     <View style={[styles.container, { width: window.width }]}>
       <View {...panResponder.panHandlers} style={styles.fullSize}>
@@ -269,29 +298,65 @@ export function PlantView({ plant }: PlantViewProps) {
           onContextCreate={onContextCreate}
         />
         
-        {/* Chat overlay */}
-        <SafeAreaView 
-          style={styles.chatOverlay}
-          edges={['bottom']}
-        >
-          {/* Input only - no messages area */}
-          <View style={styles.inputContainer}>
-            <TextInput
-              style={styles.input}
-              value={input}
-              onChangeText={setInput}
-              placeholder={isMessageLoading ? "plant is thinking..." : "type a message..."}
-              placeholderTextColor="#666666"
-              onKeyPress={handleKeyPress}
-              editable={!isMessageLoading}
-              returnKeyType="send"
-              blurOnSubmit={false}
-              multiline
-              autoCapitalize="none"
-            />
-          </View>
+        {/* History button */}
+        <SafeAreaView style={styles.historyButtonContainer} edges={['top', 'right']}>
+          <TouchableOpacity 
+            style={styles.historyButton}
+            onPress={() => setShowHistory(true)}
+          >
+            <AppText style={styles.historyButtonText}>history</AppText>
+          </TouchableOpacity>
         </SafeAreaView>
 
+        {/* Chat input overlay - hide when history is shown */}
+        {!showHistory && (
+          <SafeAreaView 
+            style={styles.chatOverlay}
+            edges={['bottom']}
+          >
+            <View style={styles.inputContainer}>
+              <TextInput
+                style={styles.input}
+                value={input}
+                onChangeText={setInput}
+                placeholder={isMessageLoading ? "plant is thinking..." : "type a message..."}
+                placeholderTextColor="#666666"
+                onKeyPress={handleKeyPress}
+                editable={!isMessageLoading}
+                returnKeyType="send"
+                blurOnSubmit={false}
+                multiline
+                autoCapitalize="none"
+              />
+            </View>
+          </SafeAreaView>
+        )}
+
+        {/* History overlay */}
+        {showHistory && (
+          <SafeAreaView style={styles.historyOverlay} edges={['top', 'bottom']}>
+            <View style={styles.historyContent}>
+              <View style={styles.historyHeader}>
+                <AppText style={styles.historyTitle}>history</AppText>
+                <TouchableOpacity 
+                  style={styles.closeButton}
+                  onPress={() => setShowHistory(false)}
+                >
+                  <AppText style={styles.closeButtonText}>×</AppText>
+                </TouchableOpacity>
+              </View>
+              <ScrollView style={styles.historyMessages}>
+                {messages.map(msg => (
+                  <View key={msg.id} style={[styles.messageRow, msg.sender === 'plant' && styles.plantMessage]}>
+                    <AppText style={styles.messageText}>{msg.content}</AppText>
+                  </View>
+                ))}
+              </ScrollView>
+            </View>
+          </SafeAreaView>
+        )}
+
+        {/* Loading and error overlays */}
         {isLoading && (
           <View style={[styles.fullSize, styles.overlay]}>
             <LoadingScreen />
@@ -362,6 +427,7 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     backgroundColor: 'transparent',
+    zIndex: 50,
   },
   inputContainer: {
     margin: 16,
@@ -374,5 +440,67 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'SpaceMono',
     maxHeight: 100,
+  },
+  historyButtonContainer: {
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    padding: 16,
+  },
+  historyButton: {
+    backgroundColor: '#ffffff20',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 4,
+  },
+  historyButtonText: {
+    fontSize: 12,
+    color: '#ffffff',
+  },
+  historyOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: '#111419ee',
+    zIndex: 100,
+  },
+  historyContent: {
+    flex: 1,
+    margin: 16,
+  },
+  historyHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  historyTitle: {
+    fontSize: 18,
+    color: '#ffffff',
+  },
+  closeButton: {
+    padding: 8,
+  },
+  closeButtonText: {
+    fontSize: 24,
+    color: '#ffffff',
+  },
+  historyMessages: {
+    flex: 1,
+  },
+  messageRow: {
+    padding: 8,
+    marginBottom: 8,
+    backgroundColor: '#ffffff20',
+    borderRadius: 4,
+  },
+  plantMessage: {
+    backgroundColor: '#ffffff10',
+  },
+  messageText: {
+    fontSize: 14,
+    color: '#ffffff',
   },
 }); 

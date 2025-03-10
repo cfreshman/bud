@@ -2,15 +2,64 @@ import { API_URL } from '../config';
 import { PlantData } from '../engine/types';
 import { getToken } from './auth';
 
+export interface Message {
+  id: string;
+  plantId: string;
+  content: string;
+  sender: 'user' | 'plant';
+  timestamp: number;
+}
+
+/**
+ * Load chat history for a plot
+ */
+export async function loadChatHistory(plotIndex: string): Promise<Message[]> {
+  const token = await getToken();
+  if (!token) throw new Error('not authenticated');
+
+  const response = await fetch(`${API_URL}/plants/${plotIndex}/chat`, {
+    headers: {
+      'Authorization': `Bearer ${token}`
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error('Failed to load chat history');
+  }
+
+  return response.json();
+}
+
+/**
+ * Save chat history for a plot
+ */
+export async function saveChatHistory(plotIndex: string, messages: Message[]): Promise<void> {
+  const token = await getToken();
+  if (!token) throw new Error('not authenticated');
+
+  const response = await fetch(`${API_URL}/plants/${plotIndex}/chat`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    },
+    body: JSON.stringify({ messages })
+  });
+
+  if (!response.ok) {
+    throw new Error('Failed to save chat history');
+  }
+}
+
 /**
  * Send a message to the plant and get a response
- * @param plantId - The ID of the plant
+ * @param plotIndex - The plot index of the plant
  * @param message - The message to send
  * @param plantData - The plant data to use for personality
  * @returns The plant's response
  */
 export async function sendMessageToPlant(
-  plantId: string,
+  plotIndex: string,
   message: string,
   plantData: PlantData
 ): Promise<string> {
@@ -28,7 +77,7 @@ export async function sendMessageToPlant(
     if (!token) throw new Error('not authenticated');
 
     // Send request to backend
-    const response = await fetch(`${API_URL}/plants/${plantId}/chat`, {
+    const response = await fetch(`${API_URL}/plants/${plotIndex}/chat`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
