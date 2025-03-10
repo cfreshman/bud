@@ -1,5 +1,6 @@
 import { PlantData } from '../engine/types';
 import { API_URL } from '../config';
+import { getToken } from './auth';
 
 /**
  * Send a message to the plant and get a response
@@ -22,14 +23,18 @@ export async function sendMessageToPlant(
       }))
     };
 
+    // Get token for authentication
+    const token = getToken();
+    if (!token) throw new Error('not authenticated');
+
     // Send request to backend
-    const response = await fetch(`${API_URL}/chat`, {
+    const response = await fetch(`${API_URL}/plants/${plantId}/chat`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
       },
       body: JSON.stringify({
-        plantId,
         message,
         plantAttributes
       }),

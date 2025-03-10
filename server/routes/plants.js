@@ -1,31 +1,8 @@
 const express = require('express')
 const router = express.Router()
-const mongoose = require('mongoose')
 const auth = require('../middleware/auth')
-
-// Plant schema
-const plantSchema = new mongoose.Schema({
-  userId: {
-    type: mongoose.Schema.Types.ObjectId,
-    required: true,
-    ref: 'User'
-  },
-  plotIndex: {
-    type: Number,
-    required: true,
-    min: 0,
-    max: 5
-  },
-  serializedPlant: {
-    type: String,
-    required: true
-  }
-})
-
-// Compound index to ensure one plant per plot per user
-plantSchema.index({ userId: 1, plotIndex: 1 }, { unique: true })
-
-const Plant = mongoose.model('Plant', plantSchema)
+const { Plant, ChatHistory } = require('../models')
+const { generatePlantResponse } = require('../services/openai')
 
 // Get all plants for user
 router.get('/', auth, async (req, res) => {
@@ -81,10 +58,98 @@ router.delete('/:plotIndex', auth, async (req, res) => {
     }
 
     await Plant.deleteOne({ userId: req.user.userId, plotIndex })
+    
+    // Also delete chat history when plant is deleted
+    await ChatHistory.deleteOne({ userId: req.user.userId, plotIndex })
+    
     res.status(200).json({ message: 'plant deleted' })
   } catch (error) {
     console.error('Failed to delete plant:', error)
     res.status(500).json({ message: 'error deleting plant' })
+  }
+})
+
+// Get chat history for a plot
+router.get('/:plotIndex/chat', auth, async (req, res) => {
+  try {
+    const plotIndex = parseInt(req.params.plotIndex)
+    if (isNaN(plotIndex) || plotIndex < 0 || plotIndex > 5) {
+      return res.status(400).json({ message: 'invalid plot index' })
+    }
+
+    const chatHistory = await ChatHistory.findOne({ 
+      userId: req.user.userId, 
+      plotIndex 
+    })
+
+    res.json(chatHistory?.messages || [])
+  } catch (error) {
+    console.error('Failed to get chat history:', error)
+    res.status(500).json({ message: 'error loading chat history' })
+  }
+})
+
+// Send a message to a plant
+router.post('/:plotIndex/chat', auth, async (req, res) => {
+  try {
+    const plotIndex = parseInt(req.params.plotIndex)
+    if (isNaN(plotIndex) || plotIndex < 0 || plotIndex > 5) {
+      return res.status(400).json({ message: 'invalid plot index' })
+    }
+
+    const { message, plantAttributes } = req.body
+    if (!message) {
+      return res.status(400).json({ message: 'message is required' })
+    }
+
+    // Get plant response
+    const response = await generatePlantResponse(req.user.userId, plotIndex, message, plantAttributes)
+
+    res.json({ message: response })
+  } catch (error) {
+    console.error('Failed to get plant response:', error)
+    res.status(500).json({ message: 'error getting plant response' })
+  }
+})
+
+// Save chat history for a plot
+router.put('/:plotIndex/chat', auth, async (req, res) => {
+  try {
+    const plotIndex = parseInt(req.params.plotIndex)
+    if (isNaN(plotIndex) || plotIndex < 0 || plotIndex > 5) {
+      return res.status(400).json({ message: 'invalid plot index' })
+    }
+
+    await ChatHistory.findOneAndUpdate(
+      { userId: req.user.userId, plotIndex },
+      { 
+        userId: req.user.userId,
+        plotIndex,
+        messages: req.body.messages
+      },
+      { upsert: true, new: true }
+    )
+
+    res.status(200).json({ message: 'chat history saved' })
+  } catch (error) {
+    console.error('Failed to save chat history:', error)
+    res.status(500).json({ message: 'error saving chat history' })
+  }
+})
+
+// Delete chat history for a plot
+router.delete('/:plotIndex/chat', auth, async (req, res) => {
+  try {
+    const plotIndex = parseInt(req.params.plotIndex)
+    if (isNaN(plotIndex) || plotIndex < 0 || plotIndex > 5) {
+      return res.status(400).json({ message: 'invalid plot index' })
+    }
+
+    await ChatHistory.deleteOne({ userId: req.user.userId, plotIndex })
+    res.status(200).json({ message: 'chat history deleted' })
+  } catch (error) {
+    console.error('Failed to delete chat history:', error)
+    res.status(500).json({ message: 'error deleting chat history' })
   }
 })
 

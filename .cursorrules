@@ -5,3 +5,4 @@ we're creating "bud", a Spore-like AI plant companion game/simulation/chatbot
 - do not remove or break any existing code you're not supposed to. never degrade functionality
 - use a single App.css file for all styles
 - if i edit something, don't revert it back
+- we use gpt-4o-mini

@@ -1,28 +1,29 @@
 const OpenAI = require('openai');
+const { ChatHistory } = require('../models');
 
 // Initialize OpenAI client
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
 
-// In-memory conversation history (in a real app, this would be in a database)
-const conversationHistory = new Map();
-
 /**
  * Generate a response from the plant based on its attributes and the user's message
- * @param {string} plantId - Unique identifier for the plant
+ * @param {string} userId - User ID
+ * @param {number} plotIndex - Plot index
  * @param {string} message - User's message to the plant
  * @param {Object} plantAttributes - Attributes of the plant that influence its personality
  * @returns {Promise<string>} - The plant's response
  */
-async function generatePlantResponse(plantId, message, plantAttributes) {
+async function generatePlantResponse(userId, plotIndex, message, plantAttributes) {
   try {
-    // Get or initialize conversation history for this plant
-    if (!conversationHistory.has(plantId)) {
-      conversationHistory.set(plantId, []);
-    }
+    // Get chat history from MongoDB
+    const chatHistory = await ChatHistory.findOne({ userId, plotIndex });
     
-    const history = conversationHistory.get(plantId);
+    // Convert chat history messages to OpenAI format
+    const history = (chatHistory?.messages || []).map(msg => ({
+      role: msg.sender === 'user' ? 'user' : 'assistant',
+      content: msg.content
+    }));
     
     // Add user message to history
     history.push({ role: 'user', content: message });
@@ -42,9 +43,8 @@ async function generatePlantResponse(plantId, message, plantAttributes) {
       messages,
     });
     
-    // Extract and save response
+    // Extract response
     const response = completion.choices[0].message.content.trim();
-    history.push({ role: 'assistant', content: response });
     
     return response;
   } catch (error) {

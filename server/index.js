@@ -2,6 +2,10 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
+
+// Load models first
+require('./models');
+
 const { chatRouter } = require('./routes/chat');
 const authRouter = require('./routes/auth');
 const plantsRouter = require('./routes/plants');
@@ -21,8 +25,8 @@ app.use(express.json());
 
 // Routes
 app.use('/api/auth', authRouter);
-app.use('/api/chat', chatRouter);
 app.use('/api/plants', plantsRouter);
+app.use('/api/chat', chatRouter);
 
 // Health check endpoint
 app.get('/health', (req, res) => {
