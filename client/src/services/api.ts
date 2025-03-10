@@ -1,6 +1,5 @@
 import { PlantData } from '../engine/types';
-
-const API_URL = 'http://localhost:3001/api';
+import { API_URL } from '../config';
 
 /**
  * Send a message to the plant and get a response

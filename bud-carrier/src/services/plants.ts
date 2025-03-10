@@ -1,8 +1,7 @@
+import { API_URL } from '../config';
 import { PlantData } from '../engine/types';
 import { getToken } from './auth';
 import { deserializePlantData } from '../utils/plantSaveUtils';
-
-const API_URL = 'http://localhost:3001/api';
 
 interface ServerResponse {
   [key: string]: {
