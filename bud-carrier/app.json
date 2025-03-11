@@ -18,7 +18,8 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "dev.freshman.bud",
-      "buildNumber": "1"
+      "buildNumber": "1",
+      "jsEngine": "jsc"
     },
     "android": {
       "adaptiveIcon": {
