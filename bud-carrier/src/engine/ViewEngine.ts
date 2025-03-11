@@ -43,21 +43,25 @@ export class ViewEngine {
     this.renderer.setSize(width, height);
     this.renderer.setClearColor('#88aa99');
     
+    // Enable shadows
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    
     // Create scene
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color('#88aa99');
     
-    // Create camera
-    this.camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 1000);
+    // Create camera with better FOV and positioning
+    this.camera = new THREE.PerspectiveCamera(40, width / height, 0.1, 1000);
     
     // Create plant group
     this.plantGroup = new THREE.Group();
     this.scene.add(this.plantGroup);
     
-    // Set initial camera position - directly in front
-    this.camera.position.set(5, 0, 0);
+    // Set initial camera position for better view
+    this.camera.position.set(0, 2, 3);
     this.camera.lookAt(0, 1, 0);
-    this.targetRotation.set(Math.PI / 2 * .95, 0);  // Reset rotation
+    this.targetRotation.set(Math.PI/2, 0);  // Start at front center (90°) with 15° vertical
     this.cameraTarget.set(0, 1, 0);    // Look at center
     this.updateCameraPosition();
     console.log('Initial camera position:', this.camera.position.toArray());
@@ -77,12 +81,17 @@ export class ViewEngine {
 
   // Update camera position based on rotation and distance
   private updateCameraPosition() {
-    const phi = this.targetRotation.y + Math.PI / 4; // Add offset to start above
-    const theta = this.targetRotation.x;
+    // Convert targetRotation.x from 15° to 165° range to create limited arc
+    const theta = this.targetRotation.x; // Remove the negation and offset
     
-    this.camera.position.x = this.cameraDistance * Math.sin(phi) * Math.cos(theta);
-    this.camera.position.y = this.cameraDistance * Math.cos(phi);
-    this.camera.position.z = this.cameraDistance * Math.sin(phi) * Math.sin(theta);
+    // Convert targetRotation.y to control height from 0° to 45°
+    const heightRatio = Math.max(0, Math.min(1, this.targetRotation.y / (Math.PI/4))); // 0 to 1
+    const phi = heightRatio * (Math.PI/4); // 0° to 45°
+    
+    // Calculate camera position on the arc
+    this.camera.position.x = -this.cameraDistance * Math.cos(theta);
+    this.camera.position.z = this.cameraDistance * Math.sin(theta) * Math.cos(phi);
+    this.camera.position.y = this.cameraDistance * Math.sin(phi);
     
     this.camera.position.add(this.cameraTarget);
     this.camera.lookAt(this.cameraTarget);
@@ -91,10 +100,11 @@ export class ViewEngine {
   // Handle touch input for camera control
   public onTouchMove(dx: number, dy: number) {
     const sensitivity = 0.01;
-    // Limit horizontal rotation more
-    this.targetRotation.x = Math.max(-Math.PI/6, Math.min(Math.PI/6, this.targetRotation.x + dx * sensitivity));
-    // Limit vertical rotation more
-    this.targetRotation.y = Math.max(-Math.PI/6, Math.min(Math.PI/6, this.targetRotation.y + dy * sensitivity));
+    // Horizontal rotation from 15° to 165° (through front at 90°)
+    // Negate dx to match physical swipe direction
+    this.targetRotation.x = Math.max(Math.PI/12, Math.min(11*Math.PI/12, this.targetRotation.x - dx * sensitivity));
+    // Vertical angle from 0° to 45° from horizontal
+    this.targetRotation.y = Math.max(0, Math.min(Math.PI/4, this.targetRotation.y + dy * sensitivity));
     this.updateCameraPosition();
     
     // Force render after camera move
@@ -105,8 +115,8 @@ export class ViewEngine {
   // Handle pinch input for zoom
   public onPinch(scale: number) {
     const sensitivity = 0.05;
-    // Adjust zoom limits for closer view
-    this.cameraDistance = Math.max(3, Math.min(7, this.cameraDistance * (1 + (1 - scale) * sensitivity)));
+    // Adjust zoom limits for better view
+    this.cameraDistance = Math.max(2, Math.min(8, this.cameraDistance * (1 + (1 - scale) * sensitivity)));
     this.updateCameraPosition();
     
     // Force render after camera move
@@ -201,40 +211,56 @@ export class ViewEngine {
     this.bonePartIds.clear();
 
     if (!this.hasBasicSetup) {
-      // Add lights
-      const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+      // Add lights with better intensity
+      const ambientLight = new THREE.AmbientLight(0xffffff, 2.2);
       this.scene.add(ambientLight);
       
-      const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0);
-      directionalLight.position.set(0, 5, 5);  // Move light to front
+      const directionalLight = new THREE.DirectionalLight(0xffffff, 2.2);
+      directionalLight.position.set(2, 4, 2);
+      directionalLight.castShadow = true;
       this.scene.add(directionalLight);
       
-      // Add ground plane for visibility
-      const groundGeometry = new THREE.PlaneGeometry(10, 10);
-      const groundMaterial = new THREE.MeshBasicMaterial({ 
-        color: '#bbddbb'
+      const fillLight = new THREE.DirectionalLight(0xffffff, 0.5);
+      fillLight.position.set(-2, 2, -2);
+      this.scene.add(fillLight);
+      
+      // Add ground plane with better material
+      const groundGeometry = new THREE.CircleGeometry(5, 32);
+      const groundMaterial = new THREE.MeshStandardMaterial({ 
+        color: '#bbddbb',
+        roughness: 0.8,
+        metalness: 0.1
       });
       const ground = new THREE.Mesh(groundGeometry, groundMaterial);
       ground.rotation.x = -Math.PI / 2;
+      ground.receiveShadow = true;
       this.scene.add(ground);
 
-      // Add pot and dirt mound
-      // const potGeo = new THREE.CylinderGeometry(0.6, 0.4, 0.4, 8);
-      // const potMat = new THREE.MeshBasicMaterial({ 
-      //   color: '#8B5E3C'
-      // });
-      // const pot = new THREE.Mesh(potGeo, potMat);
-      // pot.position.y = 0.2;
-      // this.scene.add(pot);
+      // Add pot with better material
+      const potGeo = new THREE.CylinderGeometry(0.6, 0.4, 0.4, 32);
+      const potMat = new THREE.MeshStandardMaterial({ 
+        color: '#8B5E3C',
+        roughness: 0.6,
+        metalness: 0.1
+      });
+      const pot = new THREE.Mesh(potGeo, potMat);
+      pot.position.y = 0.2;
+      pot.castShadow = true;
+      pot.receiveShadow = true;
+      this.scene.add(pot);
 
-      // Add dirt mound
-      const dirtGeo = new THREE.SphereGeometry(0.5, 8, 8);
-      const dirtMat = new THREE.MeshBasicMaterial({ 
-        color: '#5C4033'
+      // Add dirt with better material
+      const dirtGeo = new THREE.SphereGeometry(0.55, 32, 16);
+      const dirtMat = new THREE.MeshStandardMaterial({ 
+        color: '#5C4033',
+        roughness: 0.8,
+        metalness: 0
       });
       const dirt = new THREE.Mesh(dirtGeo, dirtMat);
       dirt.scale.y = 0.3;
       dirt.position.y = 0.35;
+      dirt.castShadow = true;
+      dirt.receiveShadow = true;
       this.scene.add(dirt);
 
       this.hasBasicSetup = true;
@@ -407,12 +433,15 @@ export class ViewEngine {
         length: bone.length
       });
 
-      const material = new THREE.MeshBasicMaterial({ 
+      const material = new THREE.MeshStandardMaterial({ 
         color: attributes.color,
+        roughness: 0.7,
+        metalness: 0.1
       });
 
       const mesh = new THREE.Mesh(geometry, material);
-      // mesh.frustumCulled = false;
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
       mesh.userData.boneId = boneId;
       mesh.userData.bodyId = body.id;
       mesh.userData.partId = part.id;
@@ -422,14 +451,18 @@ export class ViewEngine {
       if (bone.isHead && part.type === 'stem' && this.isCloseUp) {
         const eyeGroup = new THREE.Group();
         
-        // Create eyes with flat shading
+        // Create eyes with better materials
         const eyeGeo = new THREE.SphereGeometry(bone.width * 0.4, 12, 8);
-        const eyeMat = new THREE.MeshBasicMaterial({ 
+        const eyeMat = new THREE.MeshStandardMaterial({ 
           color: '#ffffff',
+          roughness: 0.7,
+          metalness: 0.2
         });
         const pupilGeo = new THREE.SphereGeometry(bone.width * 0.2, 8, 8);
-        const pupilMat = new THREE.MeshBasicMaterial({ 
+        const pupilMat = new THREE.MeshStandardMaterial({ 
           color: '#000000',
+          roughness: 0.7,
+          metalness: 0.2
         });
         
         // Left eye with better positioning
