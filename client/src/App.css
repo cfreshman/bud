@@ -1,3 +1,7 @@
+:root {
+  font-family: 'Space Mono', monospace;
+}
+
 * {
   margin: 0;
   padding: 0;
@@ -56,7 +60,6 @@
   flex-direction: column;
   background-color: #111419;
   color: #ffffff;
-  font-family: monospace;
 }
 
 .main-view {
@@ -79,7 +82,6 @@
   position: fixed;
   top: 1rem;
   left: 1rem;
-  font-family: monospace;
   font-size: 0.8rem;
   color: #666;
   z-index: 1000;
@@ -108,7 +110,6 @@
   padding: 1.25rem;
   border: 1px solid #dddddd;
   border-radius: 4px;
-  font-family: monospace;
   color: #dddddd;
   min-width: 280px;
   z-index: 1000;
@@ -177,7 +178,6 @@
   color: #dddddd;
   padding: 0.4rem 0.75rem;
   border-radius: 3px;
-  font-family: monospace;
   font-size: 12px;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -234,7 +234,6 @@
   color: #dddddd;
   padding: 0.4rem 0.75rem;
   border-radius: 3px;
-  font-family: monospace;
   font-size: 12px;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -265,7 +264,6 @@
   color: #dddddd;
   padding: 0.4rem 0.75rem;
   border-radius: 3px;
-  font-family: monospace;
   font-size: 12px;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -329,7 +327,6 @@
   border: 1px solid #000000;
   border-radius: 999px;
   padding: 4px 12px;
-  font-family: monospace;
   font-size: 14px;
   cursor: pointer;
   height: 32px;
@@ -359,7 +356,6 @@
   border-radius: 4px;
   padding: 12px;
   color: #000000;
-  font-family: monospace;
   font-size: 14px;
   resize: none;
   overflow: hidden;
@@ -374,7 +370,6 @@
   border-radius: 999px;
   color: #000000;
   padding: 8px 16px;
-  font-family: monospace;
   font-size: 14px;
   cursor: pointer;
 }
@@ -401,7 +396,6 @@
   max-width: 80%;
   padding: 8px 12px;
   font-size: 14px;
-  font-family: monospace;
   background: #fdfdfd;
   color: #000000;
   border: 1px solid #000000;
@@ -420,7 +414,6 @@
 .chat-empty-message {
   color: #000000;
   text-align: center;
-  font-family: monospace;
 }
 
 .plot-menu-backdrop {
@@ -436,7 +429,6 @@
   background-color: #fdfdfd;
   border: 1px solid #000000;
   border-radius: 4px;
-  font-family: monospace;
   font-size: 14px;
   min-width: 100px;
   pointer-events: auto;
@@ -474,7 +466,6 @@
 .chat-bubble {
   padding: 8px 12px;
   border-radius: 12px;
-  font-family: monospace;
   font-size: 14px;
   max-width: 100%;
   word-wrap: break-word;
@@ -549,7 +540,6 @@
   margin: 0;
   font-size: 14px;
   color: #000000;
-  font-family: monospace;
 }
 
 .chat-history-header > div {
@@ -652,7 +642,6 @@
   align-items: center;
   justify-content: center;
   background-color: #000000;
-  font-family: monospace;
   color: #fdfdfd;
 }
 
@@ -681,7 +670,6 @@
   align-items: center;
   justify-content: center;
   background-color: #000000;
-  font-family: monospace;
 }
 
 .login-container {
@@ -716,7 +704,6 @@
   border: 1px solid #333;
   color: #fdfdfd;
   padding: 0.5rem;
-  font-family: monospace;
   font-size: 14px;
   border-radius: 4px;
 }
@@ -730,7 +717,6 @@
   border: 1px solid #fdfdfd;
   color: #fdfdfd;
   padding: 0.5rem;
-  font-family: monospace;
   font-size: 14px;
   cursor: pointer;
   border-radius: 4px;
@@ -785,7 +771,6 @@ button:focus-visible {
   justify-content: center;
   background-color: #88aa99;
   color: #000000;
-  font-family: monospace;
   padding: 2rem;
   position: relative;
   overflow: hidden;
@@ -843,7 +828,6 @@ button:focus-visible {
   color: #000000;
   border: 1px solid #000000;
   border-radius: 999px;
-  font-family: monospace;
   font-size: 14px;
   cursor: pointer;
   transition: all 0.2s;
