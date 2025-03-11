@@ -43,9 +43,10 @@ export class ViewEngine {
     this.renderer.setSize(width, height);
     this.renderer.setClearColor('#88aa99');
     
-    // Enable shadows
+    // Enable shadows with better quality
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.autoUpdate = true;
     
     // Create scene
     this.scene = new THREE.Scene();
@@ -218,6 +219,20 @@ export class ViewEngine {
       const directionalLight = new THREE.DirectionalLight(0xffffff, 2.2);
       directionalLight.position.set(2, 4, 2);
       directionalLight.castShadow = true;
+      
+      // Improve shadow map settings
+      directionalLight.shadow.mapSize.width = 2048;
+      directionalLight.shadow.mapSize.height = 2048;
+      directionalLight.shadow.camera.near = 0.1;
+      directionalLight.shadow.camera.far = 20;
+      directionalLight.shadow.camera.left = -3;
+      directionalLight.shadow.camera.right = 3;
+      directionalLight.shadow.camera.top = 3;
+      directionalLight.shadow.camera.bottom = -3;
+      directionalLight.shadow.bias = -0.001;
+      directionalLight.shadow.normalBias = 0.02;
+      directionalLight.shadow.radius = 2;
+      
       this.scene.add(directionalLight);
       
       const fillLight = new THREE.DirectionalLight(0xffffff, 0.5);
