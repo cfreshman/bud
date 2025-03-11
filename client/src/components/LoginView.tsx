@@ -45,7 +45,7 @@ export function LoginView({ onLogin }: { onLogin: () => void }) {
           />
           
           <button type="submit">
-            {error ? error : (isRegistering ? 'register' : 'login')}
+            {error ? error : (isRegistering ? 'bud 🌱 register' : 'bud 🌱 login')}
           </button>
         </form>
 
