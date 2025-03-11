@@ -19,7 +19,10 @@
       "supportsTablet": true,
       "bundleIdentifier": "dev.freshman.bud",
       "buildNumber": "1",
-      "jsEngine": "jsc"
+      "jsEngine": "jsc",
+      "config": {
+        "usesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {

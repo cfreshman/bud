@@ -1,6 +1,6 @@
-import { API_URL } from '../config';
-import { PlantData } from '../engine/types';
+import { apiUrl } from '../config';
 import { getToken } from './auth';
+import { PlantData } from '../engine/types';
 import { deserializePlantData } from '../utils/plantSaveUtils';
 
 interface PlantResponse {
@@ -19,7 +19,7 @@ export async function loadPlant(): Promise<{ plant: PlantData | undefined, plotI
   }
 
   try {
-    const response = await fetch(`${API_URL}/plants`, {
+    const response = await fetch(`${apiUrl}/plants`, {
       headers: {
         'Authorization': `Bearer ${token}`,
       },

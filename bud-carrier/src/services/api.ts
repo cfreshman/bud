@@ -1,4 +1,4 @@
-import { API_URL } from '../config';
+import { apiUrl, wsUrl, debug } from '../config';
 import { PlantData } from '../engine/types';
 import { getToken } from './auth';
 
@@ -10,14 +10,68 @@ export interface Message {
   timestamp: number;
 }
 
+const headers = {
+  'Content-Type': 'application/json',
+  'Accept': 'application/json'
+};
+
+export const api = {
+  get: async (endpoint: string, token?: string) => {
+    if (debug) console.log('API GET:', endpoint);
+    
+    const response = await fetch(`${apiUrl}${endpoint}`, {
+      method: 'GET',
+      headers: {
+        ...headers,
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+      }
+    });
+    
+    if (!response.ok) {
+      throw new Error(`API Error: ${response.status}`);
+    }
+    
+    return response.json();
+  },
+
+  post: async (endpoint: string, data: any, token?: string) => {
+    if (debug) console.log('API POST:', endpoint, data);
+    
+    const response = await fetch(`${apiUrl}${endpoint}`, {
+      method: 'POST',
+      headers: {
+        ...headers,
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+      },
+      body: JSON.stringify(data)
+    });
+
+    if (!response.ok) {
+      throw new Error(`API Error: ${response.status}`);
+    }
+
+    return response.json();
+  },
+
+  // Add WebSocket connection helper
+  createWebSocket: (endpoint: string, token?: string) => {
+    const url = new URL(endpoint, wsUrl);
+    if (token) {
+      url.searchParams.append('token', token);
+    }
+    if (debug) console.log('Creating WebSocket:', url.toString());
+    return new WebSocket(url.toString());
+  }
+};
+
 /**
  * Load chat history for a plot
  */
-export async function loadChatHistory(plotIndex: string): Promise<Message[]> {
+export async function loadChatHistory(plotIndex: number): Promise<Message[]> {
   const token = await getToken();
   if (!token) throw new Error('not authenticated');
 
-  const response = await fetch(`${API_URL}/plants/${plotIndex}/chat`, {
+  const response = await fetch(`${apiUrl}/plants/${plotIndex}/chat`, {
     headers: {
       'Authorization': `Bearer ${token}`
     }
@@ -33,11 +87,11 @@ export async function loadChatHistory(plotIndex: string): Promise<Message[]> {
 /**
  * Save chat history for a plot
  */
-export async function saveChatHistory(plotIndex: string, messages: Message[]): Promise<void> {
+export async function saveChatHistory(plotIndex: number, messages: Message[]): Promise<void> {
   const token = await getToken();
   if (!token) throw new Error('not authenticated');
 
-  const response = await fetch(`${API_URL}/plants/${plotIndex}/chat`, {
+  const response = await fetch(`${apiUrl}/plants/${plotIndex}/chat`, {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json',
@@ -59,7 +113,7 @@ export async function saveChatHistory(plotIndex: string, messages: Message[]): P
  * @returns The plant's response
  */
 export async function sendMessageToPlant(
-  plotIndex: string,
+  plotIndex: number,
   message: string,
   plantData: PlantData
 ): Promise<string> {
@@ -77,7 +131,7 @@ export async function sendMessageToPlant(
     if (!token) throw new Error('not authenticated');
 
     // Send request to backend
-    const response = await fetch(`${API_URL}/plants/${plotIndex}/chat`, {
+    const response = await fetch(`${apiUrl}/plants/${plotIndex}/chat`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

@@ -1,12 +1,12 @@
 import * as SecureStore from 'expo-secure-store';
-import { API_URL } from '../config';
+import { apiUrl } from '../config';
 
 export interface AuthResponse {
   token: string;
 }
 
 export async function login(username: string, password: string): Promise<AuthResponse> {
-  const response = await fetch(`${API_URL}/auth/login`, {
+  const response = await fetch(`${apiUrl}/auth/login`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -23,7 +23,7 @@ export async function login(username: string, password: string): Promise<AuthRes
 }
 
 export async function register(username: string, password: string): Promise<AuthResponse> {
-  const response = await fetch(`${API_URL}/auth/register`, {
+  const response = await fetch(`${apiUrl}/auth/register`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
