@@ -527,8 +527,15 @@ export function PlantView({ plant, plotIndex = 0, onLogout }: PlantViewProps) {
               onContentSizeChange={() => scrollViewRef.current?.scrollToEnd({ animated: false })}
             >
               {messages.map(msg => (
-                <View key={msg.id} style={[styles.messageRow, msg.sender === 'plant' && styles.plantMessage]}>
-                  <AppText style={styles.messageText}>{msg.content}</AppText>
+                <View key={msg.id} style={[
+                  styles.messageRow, 
+                  msg.sender === 'plant' ? styles.plantMessage : styles.userMessage
+                ]}>
+                  <AppText style={[
+                    styles.messageText,
+                    styles.historyMessageText,
+                    msg.sender === 'plant' ? styles.historyPlantMessageText : styles.historyUserMessageText
+                  ]}>{msg.content}</AppText>
                 </View>
               ))}
             </ScrollView>
@@ -653,15 +660,34 @@ const styles = StyleSheet.create({
   messageRow: {
     padding: 8,
     marginBottom: 8,
-    backgroundColor: '#ffffff20',
+    maxWidth: '90%',
     borderRadius: 4,
   },
+  userMessage: {
+    alignSelf: 'flex-end',
+    backgroundColor: '#ffffff20',
+  },
   plantMessage: {
+    alignSelf: 'flex-start',
     backgroundColor: '#ffffff10',
   },
   messageText: {
     fontSize: 14,
+  },
+  historyMessageText: {
     color: '#ffffff',
+  },
+  historyPlantMessageText: {
+    opacity: 0.8,
+  },
+  historyUserMessageText: {
+    opacity: 1,
+  },
+  userMessageText: {
+    color: '#000000',
+  },
+  plantMessageText: {
+    color: '#000000',
   },
   speechBubble: {
     position: 'absolute',
@@ -708,11 +734,6 @@ const styles = StyleSheet.create({
   },
   lastMessageText: {
     fontSize: 14,
-    fontFamily: 'SpaceMono',
-    color: '#000000',
-  },
-  userMessageText: {
-    fontSize: 12,
     fontFamily: 'SpaceMono',
     color: '#000000',
   },
