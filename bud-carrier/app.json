@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "bud-carrier",
+    "name": "bud carrier",
     "slug": "bud-carrier",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -22,7 +22,8 @@
       "jsEngine": "jsc",
       "config": {
         "usesNonExemptEncryption": false
-      }
+      },
+      "teamId": "5N36X2ZHR4"
     },
     "android": {
       "adaptiveIcon": {

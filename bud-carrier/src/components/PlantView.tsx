@@ -31,9 +31,6 @@ export function PlantView({ plant, plotIndex = 0, onLogout }: PlantViewProps) {
   const [isMessageLoading, setIsMessageLoading] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
   const [showHistory, setShowHistory] = useState(false);
-  const [speechBubbleText, setSpeechBubbleText] = useState('');
-  const [speechBubblePosition, setSpeechBubblePosition] = useState({ x: 0, y: 0 });
-  const speechBubbleOpacity = useRef(new Animated.Value(0)).current;
   const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
 
   // Log when component mounts and unmounts
@@ -219,7 +216,7 @@ export function PlantView({ plant, plotIndex = 0, onLogout }: PlantViewProps) {
     error
   });
 
-  // Load chat history and show last message when component mounts
+  // Load chat history when component mounts
   useEffect(() => {
     const loadHistory = async () => {
       if (!plant) return;
@@ -229,14 +226,6 @@ export function PlantView({ plant, plotIndex = 0, onLogout }: PlantViewProps) {
         const history = await loadChatHistory(plotIndex);
         console.log('Loaded chat history:', history.length, 'messages');
         setMessages(history);
-
-        // Show last plant message immediately
-        if (history.length > 0) {
-          const lastPlantMessage = [...history].reverse().find(msg => msg.sender === 'plant');
-          if (lastPlantMessage) {
-            showSpeechBubble(lastPlantMessage.content);
-          }
-        }
       } catch (error) {
         console.error('Error loading chat history:', error);
       }
@@ -245,43 +234,14 @@ export function PlantView({ plant, plotIndex = 0, onLogout }: PlantViewProps) {
     loadHistory();
   }, [plant, plotIndex]);
 
-  // Debug effect to track messages and speech bubble
+  // Debug effect to track messages
   useEffect(() => {
     console.log('Messages changed:', {
       messageCount: messages.length,
       lastMessage: messages[messages.length - 1],
-      speechBubbleText,
-      speechBubblePosition,
       hasEngine: !!engineRef.current
     });
-  }, [messages, speechBubbleText, speechBubblePosition]);
-
-  // Show speech bubble
-  const showSpeechBubble = (text: string) => {
-    if (!engineRef.current) {
-      console.log('No engine ref when showing speech bubble');
-      return;
-    }
-
-    // Get screen position above plant
-    const pos = engineRef.current.getPlantHeadPosition();
-    if (!pos) {
-      console.log('No position returned from getPlantHeadPosition');
-      return;
-    }
-
-    console.log('Showing speech bubble:', { text, pos });
-    setSpeechBubbleText(text);
-    setSpeechBubblePosition(pos);
-
-    // Fade in animation
-    speechBubbleOpacity.setValue(0);
-    Animated.timing(speechBubbleOpacity, {
-      toValue: 1,
-      duration: 200,
-      useNativeDriver: true
-    }).start();
-  };
+  }, [messages]);
 
   const handleSend = async () => {
     const cleanInput = input.trim().replace(/\n/g, ' ');
@@ -303,9 +263,6 @@ export function PlantView({ plant, plotIndex = 0, onLogout }: PlantViewProps) {
     try {
       // Add user message to messages
       setMessages(prev => [...prev, userMessage]);
-
-      // Show thinking bubble
-      showSpeechBubble('...');
       
       // Get plant's response using plotIndex
       const plantResponse = await sendMessageToPlant(plotIndex, cleanInput, plant);
@@ -319,9 +276,8 @@ export function PlantView({ plant, plotIndex = 0, onLogout }: PlantViewProps) {
         timestamp: Date.now()
       };
       
-      // Add plant message to messages and show in speech bubble
+      // Add plant message to messages
       setMessages(prev => [...prev, plantMessage]);
-      showSpeechBubble(plantResponse);
       
       // Scroll to bottom
       scrollViewRef.current?.scrollToEnd({ animated: true });
@@ -336,7 +292,6 @@ export function PlantView({ plant, plotIndex = 0, onLogout }: PlantViewProps) {
         timestamp: Date.now()
       };
       setMessages(prev => [...prev, fallbackMessage]);
-      showSpeechBubble(fallbackMessage.content);
     } finally {
       setIsMessageLoading(false);
     }
@@ -386,27 +341,6 @@ export function PlantView({ plant, plotIndex = 0, onLogout }: PlantViewProps) {
           style={[styles.fullSize, { width: window.width }]}
           onContextCreate={onContextCreate}
         />
-        
-        {/* Speech bubble overlay */}
-        {speechBubbleText && (
-          <Animated.View 
-            style={[
-              styles.speechBubble,
-              {
-                left: speechBubblePosition.x,
-                top: speechBubblePosition.y - 50,
-                opacity: speechBubbleOpacity,
-                transform: [
-                  { translateX: -50 },
-                ],
-                borderWidth: 2,
-                borderColor: 'red'
-              }
-            ]}
-          >
-            <AppText style={styles.speechBubbleText}>{speechBubbleText}</AppText>
-          </Animated.View>
-        )}
         
         {/* History button */}
         <SafeAreaView style={styles.historyButtonContainer} edges={['top', 'right']}>
@@ -472,7 +406,7 @@ export function PlantView({ plant, plotIndex = 0, onLogout }: PlantViewProps) {
                       styles.lastMessage,
                       msg.sender === 'plant' ? styles.plantLastMessage : styles.userLastMessage
                     ]}>
-                      <AppText style={msg.sender === 'plant' ? styles.lastMessageText : styles.userMessageText}>
+                      <AppText style={msg.sender === 'plant' ? styles.lastMessageText : styles.userLastMessageText}>
                         {msg.content}
                       </AppText>
                     </View>
@@ -496,7 +430,6 @@ export function PlantView({ plant, plotIndex = 0, onLogout }: PlantViewProps) {
                   placeholderTextColor="#666666"
                   onSubmitEditing={handleSend}
                   returnKeyType="send"
-                  blurOnSubmit={false}
                   multiline
                   autoCapitalize="none"
                 />
@@ -689,26 +622,6 @@ const styles = StyleSheet.create({
   plantMessageText: {
     color: '#000000',
   },
-  speechBubble: {
-    position: 'absolute',
-    backgroundColor: '#ffffff99',
-    padding: 12,
-    borderRadius: 8,
-    maxWidth: 200,
-    minWidth: 60,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
-    zIndex: 1000,
-  },
-  speechBubbleText: {
-    fontSize: 14,
-    color: '#000000',
-    textAlign: 'center',
-    fontFamily: 'SpaceMono',
-  },
   lastMessagesContainer: {
     width: '100%',
     paddingHorizontal: 10,
@@ -716,12 +629,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   lastMessage: {
-    padding: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
     borderRadius: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
   },
   plantLastMessage: {
     alignSelf: 'flex-start',
@@ -730,11 +640,15 @@ const styles = StyleSheet.create({
   userLastMessage: {
     alignSelf: 'flex-end',
     backgroundColor: '#ffffff99',
-    padding: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
   },
   lastMessageText: {
     fontSize: 14,
-    fontFamily: 'SpaceMono',
+    color: '#000000',
+  },
+  userLastMessageText: {
+    fontSize: 12,
     color: '#000000',
   },
   logoutButtonContainer: {
