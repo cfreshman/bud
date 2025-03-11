@@ -5,6 +5,7 @@ import * as Font from 'expo-font';
 import { LoginView } from './src/components/LoginView';
 import { AppText } from './src/components/AppText';
 import { PlantView } from './src/components/PlantView';
+import { NoPlantView } from './src/components/NoPlantView';
 import { isLoggedIn, removeToken } from './src/services/auth';
 import { loadPlant } from './src/services/plants';
 import { PlantData } from './src/engine/types';
@@ -83,8 +84,15 @@ export default function App() {
     loadData();
   }, [isAuthenticated]);
 
-  // Show loading screen only during initial setup
-  if (!isFontsLoaded || isAuthChecking) {
+  const handleLogout = async () => {
+    await removeToken();
+    setIsAuthenticated(false);
+    setPlant(undefined);
+    setPlotIndex(undefined);
+  };
+
+  // Show loading screen during initial setup or while loading plant data
+  if (!isFontsLoaded || isAuthChecking || (isAuthenticated && isLoading)) {
     return <LoadingScreen />;
   }
 
@@ -100,20 +108,18 @@ export default function App() {
     return <LoginView onLogin={() => setIsAuthenticated(true)} />;
   }
 
-  // Don't show loading screen here anymore since PlantView handles its own loading state
   return (
     <SafeAreaProvider>
       <View style={styles.container}>
-        <PlantView 
-          plant={plant} 
-          plotIndex={plotIndex || 0} 
-          onLogout={async () => {
-            await removeToken();
-            setIsAuthenticated(false);
-            setPlant(undefined);
-            setPlotIndex(undefined);
-          }} 
-        />
+        {plant && plotIndex !== undefined ? (
+          <PlantView 
+            plant={plant} 
+            plotIndex={plotIndex} 
+            onLogout={handleLogout} 
+          />
+        ) : (
+          <NoPlantView onLogout={handleLogout} />
+        )}
       </View>
     </SafeAreaProvider>
   );
