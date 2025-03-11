@@ -22,6 +22,16 @@ ssh $SERVER "
     apt update
     apt install -y mongodb-org
 
+    # Configure MongoDB security
+    mkdir -p /var/lib/mongodb
+    chown -R mongodb:mongodb /var/lib/mongodb
+    chmod 755 /var/lib/mongodb
+    
+    # Ensure MongoDB data directory has correct permissions
+    systemctl stop mongod || true
+    chown -R mongodb:mongodb /var/lib/mongodb
+    chown mongodb:mongodb /tmp/mongodb-27017.sock || true
+
     # Install other required packages
     apt install -y nginx certbot python3-certbot-nginx ufw
 

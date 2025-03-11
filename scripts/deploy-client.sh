@@ -9,11 +9,16 @@ echo "Building and deploying client..."
 # Build client locally
 cd client
 npm install
-# Skip TypeScript build and just run vite build
-npx vite build
+# Build in production mode
+NODE_ENV=production npx vite build
 
-# Create remote directory and copy build
-ssh $SERVER "mkdir -p /var/www/$DOMAIN/client"
+# Create remote directories and clean old files
+ssh $SERVER "
+    mkdir -p /var/www/$DOMAIN/client/dist
+    rm -rf /var/www/$DOMAIN/client/dist/*
+"
+
+# Copy build
 scp -r dist/* $SERVER:/var/www/$DOMAIN/client/dist/
 
 echo "Client deployment complete!" 

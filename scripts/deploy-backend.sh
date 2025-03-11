@@ -9,17 +9,34 @@ echo "Deploying backend..."
 # Create remote directory
 ssh $SERVER "mkdir -p /var/www/$DOMAIN/server"
 
-# Copy server files (excluding data directory)
+# First enter server directory
 cd server
-scp -r package*.json models routes services middleware index.js .env* $SERVER:/var/www/$DOMAIN/server/
+
+# Create PM2 ecosystem file
+cat > ecosystem.config.js << EOF
+module.exports = {
+  apps: [{
+    name: 'bud-backend',
+    script: 'index.js',
+    env: {
+      NODE_ENV: 'production',
+      PORT: 3001,
+      MONGODB_URI: 'mongodb://localhost:28000/bud'
+    }
+  }]
+}
+EOF
+
+# Copy server files and ecosystem config
+scp -r package*.json models routes services middleware index.js ecosystem.config.js $SERVER:/var/www/$DOMAIN/server/
 
 # Install dependencies and start server
 ssh $SERVER "
     cd /var/www/$DOMAIN/server
-    npm install
-    # Restart the server
+    npm install --production
+    # Restart the server with ecosystem file
     pm2 delete bud-backend || true
-    pm2 start index.js --name bud-backend
+    pm2 start ecosystem.config.js
     pm2 save
 "
 

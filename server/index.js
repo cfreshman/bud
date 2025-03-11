@@ -12,7 +12,7 @@ const plantsRouter = require('./routes/plants');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/bud';
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:28000/bud';
 
 // Connect to MongoDB
 mongoose.connect(MONGODB_URI)
@@ -29,7 +29,7 @@ app.use('/api/plants', plantsRouter);
 app.use('/api/chat', chatRouter);
 
 // Health check endpoint
-app.get('/health', (req, res) => {
+app.get('/api/health', (req, res) => {
   res.status(200).json({ 
     status: 'ok',
     mongo: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'
