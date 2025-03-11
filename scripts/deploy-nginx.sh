@@ -5,6 +5,16 @@ SERVER="root@204.48.20.134"
 DOMAIN="bud-ga.me"
 EMAIL="cyrus@freshman.dev"
 
+# Parse command line arguments
+FORCE_RENEWAL=false
+while [[ "$#" -gt 0 ]]; do
+    case $1 in
+        --force) FORCE_RENEWAL=true ;;
+        *) echo "Unknown parameter: $1"; exit 1 ;;
+    esac
+    shift
+done
+
 echo "Configuring Nginx..."
 
 # Create web root
@@ -36,7 +46,11 @@ ssh $SERVER "
 
 # Get SSL certificate
 echo "Getting SSL certificate..."
-ssh $SERVER "certbot certonly --nginx -d $DOMAIN --non-interactive --agree-tos --email $EMAIL --force-renewal"
+if [ "$FORCE_RENEWAL" = true ]; then
+    ssh $SERVER "certbot certonly --nginx -d $DOMAIN --non-interactive --agree-tos --email $EMAIL --force-renewal"
+else
+    ssh $SERVER "certbot certonly --nginx -d $DOMAIN --non-interactive --agree-tos --email $EMAIL"
+fi
 
 # Now configure full HTTPS setup
 echo "Configuring HTTPS..."
@@ -71,6 +85,22 @@ server {
     root /var/www/$DOMAIN/client/dist;
     index index.html;
 
+    # Static files
+    location / {
+        try_files \$uri \$uri/ /index.html;
+    }
+
+    # WebSocket endpoint
+    location /ws {
+        proxy_pass http://localhost:3001;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host \$host;
+        proxy_cache_bypass \$http_upgrade;
+        proxy_read_timeout 86400;  # Prevent WebSocket timeout (24h)
+    }
+
     # API endpoints
     location /api {
         proxy_pass http://localhost:3001;
@@ -79,11 +109,6 @@ server {
         proxy_set_header Connection 'upgrade';
         proxy_set_header Host \$host;
         proxy_cache_bypass \$http_upgrade;
-    }
-
-    # Serve static files for client
-    location / {
-        try_files \$uri \$uri/ /index.html;
     }
 
     # Enable gzip

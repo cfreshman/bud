@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
+const { setupWebSocketServer } = require('./services/websocket');
 
 // Load models first
 require('./models');
@@ -36,7 +37,10 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// Start server
-app.listen(PORT, () => {
+// Start HTTP server
+const server = app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
-}); 
+});
+
+// Setup WebSocket server
+setupWebSocketServer(server); 

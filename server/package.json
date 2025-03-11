@@ -9,15 +9,16 @@
     "db": "mkdir -p data/db && mongod --dbpath data/db --port 28000"
   },
   "dependencies": {
+    "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
     "dotenv": "^16.0.3",
     "express": "^4.18.2",
-    "openai": "^4.20.0",
+    "jsonwebtoken": "^9.0.0",
     "mongoose": "^8.0.0",
-    "bcryptjs": "^2.4.3",
-    "jsonwebtoken": "^9.0.0"
+    "openai": "^4.20.0",
+    "ws": "^8.18.1"
   },
   "devDependencies": {
     "nodemon": "^2.0.22"
   }
-} 
+}

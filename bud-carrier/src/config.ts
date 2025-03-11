@@ -4,11 +4,11 @@ import Constants from 'expo-constants';
 const ENV = {
   development: {
     apiUrl: 'http://localhost:3001/api',
-    wsUrl: 'ws://localhost:3001',
+    wsUrl: 'ws://localhost:3001/ws',
   },
   production: {
     apiUrl: 'https://bud-ga.me/api',
-    wsUrl: 'wss://bud-ga.me',
+    wsUrl: 'wss://bud-ga.me/ws',
   }
 };
 

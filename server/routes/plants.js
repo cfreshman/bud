@@ -3,6 +3,7 @@ const router = express.Router()
 const auth = require('../middleware/auth')
 const { Plant, ChatHistory } = require('../models')
 const { generatePlantResponse } = require('../services/openai')
+const { notifyPlantCarryUpdate } = require('../services/websocket')
 
 // Get all plants for user
 router.get('/', auth, async (req, res) => {
@@ -184,6 +185,9 @@ router.post('/:plotIndex/carry', auth, async (req, res) => {
       return res.status(404).json({ message: 'plant not found' })
     }
 
+    // Notify clients of the change
+    notifyPlantCarryUpdate(req.user.userId)
+
     res.json({ message: 'plant is now being carried' })
   } catch (error) {
     console.error('Failed to carry plant:', error)
@@ -208,6 +212,9 @@ router.post('/:plotIndex/uncarry', auth, async (req, res) => {
     if (!plant) {
       return res.status(404).json({ message: 'plant not found' })
     }
+
+    // Notify clients of the change
+    notifyPlantCarryUpdate(req.user.userId)
 
     res.json({ message: 'plant is no longer being carried' })
   } catch (error) {

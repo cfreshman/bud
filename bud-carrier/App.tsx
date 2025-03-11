@@ -1,14 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, StyleSheet, AppState } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import * as Font from 'expo-font';
 import { LoginView } from './src/components/LoginView';
 import { AppText } from './src/components/AppText';
 import { PlantView } from './src/components/PlantView';
 import { NoPlantView } from './src/components/NoPlantView';
-import { isLoggedIn, removeToken } from './src/services/auth';
+import { isLoggedIn, removeToken, getToken } from './src/services/auth';
 import { loadPlant } from './src/services/plants';
 import { PlantData } from './src/engine/types';
+import { api } from './src/services/api';
 
 export default function App() {
   const [isAuthChecking, setIsAuthChecking] = useState(true);
@@ -82,6 +83,75 @@ export default function App() {
     }
 
     loadData();
+  }, [isAuthenticated]);
+
+  // Setup WebSocket connection when authenticated
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    let ws: WebSocket | null = null;
+
+    const connectWebSocket = async () => {
+      const token = await getToken();
+      if (!token) return;
+
+      console.log('Creating WebSocket connection...');
+      ws = api.createWebSocket(token);
+      console.log('WebSocket connection created');
+
+      ws.onopen = () => {
+        console.log('WebSocket connection opened');
+      };
+
+      ws.onmessage = async (event) => {
+        const data = JSON.parse(event.data);
+        if (data.type === 'plant_carry_update') {
+          // Reload plant data when carry status changes
+          const { plant: plantData, plotIndex: loadedPlotIndex } = await loadPlant();
+          setPlant(plantData);
+          setPlotIndex(loadedPlotIndex);
+        }
+      };
+
+      ws.onclose = () => {
+        // Attempt to reconnect after a delay
+        setTimeout(connectWebSocket, 5000);
+      };
+
+      ws.onerror = (error) => {
+        console.error('WebSocket error:', error);
+      };
+    };
+
+    connectWebSocket();
+
+    return () => {
+      if (ws) {
+        ws.close();
+      }
+    };
+  }, [isAuthenticated]);
+
+  // Add AppState change listener to reload plant when app becomes active
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    const subscription = AppState.addEventListener('change', async (nextAppState) => {
+      if (nextAppState === 'active') {
+        console.log('App became active, reloading plant...');
+        try {
+          const { plant: plantData, plotIndex: loadedPlotIndex } = await loadPlant();
+          setPlant(plantData);
+          setPlotIndex(loadedPlotIndex);
+        } catch (error) {
+          console.error('Failed to reload plant:', error);
+        }
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
   }, [isAuthenticated]);
 
   const handleLogout = async () => {

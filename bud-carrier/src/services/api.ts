@@ -54,8 +54,8 @@ export const api = {
   },
 
   // Add WebSocket connection helper
-  createWebSocket: (endpoint: string, token?: string) => {
-    const url = new URL(endpoint, wsUrl);
+  createWebSocket: (token?: string) => {
+    const url = new URL(wsUrl);
     if (token) {
       url.searchParams.append('token', token);
     }
