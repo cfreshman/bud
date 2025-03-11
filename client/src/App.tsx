@@ -9,6 +9,8 @@ import { serializePlantData, deserializePlantData } from './utils/plantSaveUtils
 import { deleteMessagesForPlot } from './utils/chatStorage'
 import { isLoggedIn } from './services/auth'
 import { loadPlants, savePlant, deletePlant } from './services/plants'
+import { LoadingScreen } from './components/LoadingScreen'
+import { MobileView } from './components/MobileView'
 import './App.css'
 
 function App() {
@@ -21,6 +23,7 @@ function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [activeEditingPlant, setActiveEditingPlant] = useState<PlantData | undefined>()
   const viewEngineRef = useRef<ViewEngine | null>(null)
+  const [isMobile, setIsMobile] = useState(false)
 
   // Check auth state on mount
   useEffect(() => {
@@ -114,6 +117,17 @@ function App() {
       localStorage.setItem('chat_state', JSON.stringify(state))
     }
   }, [isChatting, selectedPlot])
+
+  // Check if device is mobile
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth <= 768);
+    };
+    
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   const handleSelectPlot = (plotIndex: number) => {
     // Get plant data from plants Map
@@ -213,6 +227,10 @@ function App() {
     localStorage.clear() // Clear all plant and chat data
   }
 
+  if (isMobile) {
+    return <MobileView />;
+  }
+
   return (
     <div className="app">
       {isAuthChecking || isLoading ? (
@@ -241,14 +259,6 @@ function App() {
           onLogout={handleLogout}
         />
       )}
-    </div>
-  )
-}
-
-function LoadingScreen() {
-  return (
-    <div className="loading-screen">
-      <div className="loading-text">bud 🌱 loading</div>
     </div>
   )
 }
