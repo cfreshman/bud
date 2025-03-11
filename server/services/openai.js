@@ -34,7 +34,7 @@ async function generatePlantResponse(userId, plotIndex, message, plantAttributes
     // Prepare messages for OpenAI
     const messages = [
       { role: 'system', content: systemMessage },
-      ...history.slice(-10) // Only use the last 10 messages to stay within context limits
+      ...history.slice(-50) // Only use the last 50 messages to stay within context limits
     ];
     
     // Call OpenAI API

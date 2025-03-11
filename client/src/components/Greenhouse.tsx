@@ -176,7 +176,7 @@ export function Greenhouse({ plants, onSelectPlot, onStartChat, onLogout }: Gree
                   } else {
                     const plant = plants.get(menuState.plotIndex)
                     if (plant) {
-                      setChatState({ plant })
+                      setChatState({ plant: { ...plant, isCarried: carriedPlotIndex === menuState.plotIndex } })
                     }
                   }
                 } else if (action === 'carry') {
