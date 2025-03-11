@@ -25,9 +25,8 @@ export function LoginView({ onLogin }: { onLogin: () => void }) {
 
   return (
     <div className="login-view">
+      <div className="circle" />
       <div className="login-container">
-        <div className="login-header">bud 🌱 {isRegistering ? 'register' : 'login'}</div>
-        
         <form onSubmit={handleSubmit}>
           <input
             type="text"
@@ -35,6 +34,7 @@ export function LoginView({ onLogin }: { onLogin: () => void }) {
             onChange={(e) => setUsername(e.target.value)}
             placeholder="username"
             autoComplete="username"
+            autoCapitalize="none"
           />
           <input
             type="password"
@@ -44,10 +44,8 @@ export function LoginView({ onLogin }: { onLogin: () => void }) {
             autoComplete="current-password"
           />
           
-          {error && <div className="login-error">{error}</div>}
-          
           <button type="submit">
-            {isRegistering ? 'register' : 'login'}
+            {error ? error : (isRegistering ? 'register' : 'login')}
           </button>
         </form>
 
