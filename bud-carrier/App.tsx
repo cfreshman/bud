@@ -5,7 +5,7 @@ import * as Font from 'expo-font';
 import { LoginView } from './src/components/LoginView';
 import { AppText } from './src/components/AppText';
 import { PlantView } from './src/components/PlantView';
-import { isLoggedIn } from './src/services/auth';
+import { isLoggedIn, removeToken } from './src/services/auth';
 import { loadPlant } from './src/services/plants';
 import { PlantData } from './src/engine/types';
 
@@ -104,7 +104,16 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <View style={styles.container}>
-        <PlantView plant={plant} plotIndex={plotIndex || 0} />
+        <PlantView 
+          plant={plant} 
+          plotIndex={plotIndex || 0} 
+          onLogout={async () => {
+            await removeToken();
+            setIsAuthenticated(false);
+            setPlant(undefined);
+            setPlotIndex(undefined);
+          }} 
+        />
       </View>
     </SafeAreaProvider>
   );

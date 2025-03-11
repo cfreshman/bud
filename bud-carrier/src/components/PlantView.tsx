@@ -13,9 +13,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 interface PlantViewProps {
   plant?: PlantData;
   plotIndex?: number;
+  onLogout?: () => void;
 }
 
-export function PlantView({ plant, plotIndex = 0 }: PlantViewProps) {
+export function PlantView({ plant, plotIndex = 0, onLogout }: PlantViewProps) {
   const engineRef = useRef<ViewEngine | null>(null);
   const lastTouchesRef = useRef<{ [key: string]: { x: number, y: number } }>({});
   const [isLoading, setIsLoading] = useState(true);
@@ -396,6 +397,16 @@ export function PlantView({ plant, plotIndex = 0 }: PlantViewProps) {
           </TouchableOpacity>
         </SafeAreaView>
 
+        {/* Logout button */}
+        <SafeAreaView style={styles.logoutButtonContainer} edges={['top', 'left']}>
+          <TouchableOpacity 
+            style={styles.historyButton}
+            onPress={onLogout}
+          >
+            <AppText style={styles.historyButtonText}>logout</AppText>
+          </TouchableOpacity>
+        </SafeAreaView>
+
         {/* Loading and error overlays */}
         {isLoading && (
           <View style={[styles.fullSize, styles.overlay]}>
@@ -673,5 +684,11 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: 'SpaceMono',
     color: '#000000',
+  },
+  logoutButtonContainer: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    padding: 16,
   },
 }); 
