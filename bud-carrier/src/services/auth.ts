@@ -6,6 +6,7 @@ export interface AuthResponse {
 }
 
 export async function login(username: string, password: string): Promise<AuthResponse> {
+  console.log('login', username, apiUrl);
   const response = await fetch(`${apiUrl}/auth/login`, {
     method: 'POST',
     headers: {
@@ -14,6 +15,7 @@ export async function login(username: string, password: string): Promise<AuthRes
     body: JSON.stringify({ username, password }),
   });
 
+  console.log('login success', response.ok);
   if (!response.ok) {
     const error = await response.json();
     throw new Error(error.message || 'login failed');

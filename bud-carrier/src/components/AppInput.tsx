@@ -9,7 +9,7 @@ export function AppInput({ style, ...props }: AppInputProps) {
   return (
     <TextInput
       style={[styles.input, style]}
-      placeholderTextColor="#666"
+      placeholderTextColor="#00000099"
       {...props}
     />
   );
@@ -18,12 +18,13 @@ export function AppInput({ style, ...props }: AppInputProps) {
 const styles = StyleSheet.create({
   input: {
     width: '100%',
-    height: 50,
-    backgroundColor: '#1a1f27',
-    borderRadius: 8,
+    height: 40,
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
     marginBottom: 10,
-    paddingHorizontal: 15,
-    color: '#fff',
+    paddingHorizontal: 12,
+    color: '#000000',
     fontFamily: 'SpaceMono',
+    fontSize: 14,
   },
 }); 

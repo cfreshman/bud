@@ -27,33 +27,33 @@ export function LoginView({ onLogin }: LoginViewProps) {
 
   return (
     <SafeAreaView style={styles.container}>
-      <AppText style={styles.title}>bud 🌱</AppText>
+      <View style={styles.circle} />
       
-      <View style={styles.form}>
-        <AppInput
-          placeholder="username"
-          value={username}
-          onChangeText={setUsername}
-          autoCapitalize="none"
-          autoComplete="username"
-        />
-        
-        <AppInput
-          placeholder="password"
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-          autoComplete="password"
-        />
-        
-        {error ? <AppText style={styles.error}>{error}</AppText> : null}
-        
-        <TouchableOpacity 
-          style={styles.button}
-          onPress={handleLogin}
-        >
-          <AppText style={styles.buttonText}>login</AppText>
-        </TouchableOpacity>
+      <View style={styles.content}>
+        <View style={styles.form}>
+          <AppInput
+            placeholder="username"
+            value={username}
+            onChangeText={setUsername}
+            autoCapitalize="none"
+            autoComplete="username"
+          />
+          
+          <AppInput
+            placeholder="password"
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry
+            autoComplete="password"
+          />
+          
+          <TouchableOpacity 
+            style={styles.button}
+            onPress={handleLogin}
+          >
+            <AppText style={styles.buttonText}>{error ? error : 'login'}</AppText>
+          </TouchableOpacity>
+        </View>
       </View>
     </SafeAreaView>
   );
@@ -62,14 +62,36 @@ export function LoginView({ onLogin }: LoginViewProps) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#111419',
+    backgroundColor: '#88aa99',
     alignItems: 'center',
     justifyContent: 'center',
     padding: 20,
+    overflow: 'hidden',
+  },
+  circle: {
+    position: 'absolute',
+    width: 1200,
+    height: 1200,
+    borderRadius: 600,
+    backgroundColor: '#bbddbb',
+    top: '50%',
+    marginTop: 225,
+  },
+  content: {
+    width: '100%',
+    alignItems: 'center',
+    zIndex: 1,
+  },
+  messageBubble: {
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
+    marginBottom: 24,
   },
   title: {
-    fontSize: 32,
-    marginBottom: 40,
+    fontSize: 14,
+    color: '#000000',
   },
   form: {
     width: '100%',
@@ -77,19 +99,24 @@ const styles = StyleSheet.create({
   },
   button: {
     width: '100%',
-    height: 50,
-    backgroundColor: '#2a313c',
-    borderRadius: 8,
+    height: 40,
+    backgroundColor: '#fdfdfd',
+    borderWidth: 1,
+    borderColor: '#000000',
+    borderRadius: 999,
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 20,
   },
   buttonText: {
-    fontSize: 16,
+    fontSize: 14,
+    color: '#000000',
   },
   error: {
-    color: '#ff6b6b',
+    color: '#ff4444',
     marginTop: 10,
     textAlign: 'center',
+    fontSize: 12,
+    opacity: 0.6,
   },
 }); 
