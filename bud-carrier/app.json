@@ -33,8 +33,7 @@
     },
     "plugins": [
       "expo-secure-store",
-      "expo-font",
-      "expo-gl"
+      "expo-font"
     ]
   }
 }
