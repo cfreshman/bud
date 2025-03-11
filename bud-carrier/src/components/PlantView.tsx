@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, StyleSheet, Dimensions, PanResponder, GestureResponderEvent, TextInput, KeyboardAvoidingView, Platform, ScrollView, TouchableOpacity, Animated } from 'react-native';
+import { View, StyleSheet, Dimensions, PanResponder, GestureResponderEvent, TextInput, KeyboardAvoidingView, Platform, ScrollView, TouchableOpacity, Animated, TouchableWithoutFeedback, Keyboard } from 'react-native';
 import { GLView, ExpoWebGLRenderingContext } from 'expo-gl';
 import { ViewEngine } from '../engine/ViewEngine';
 import { PlantData } from '../engine/types';
@@ -34,6 +34,7 @@ export function PlantView({ plant, plotIndex = 0, onLogout }: PlantViewProps) {
   const [speechBubbleText, setSpeechBubbleText] = useState('');
   const [speechBubblePosition, setSpeechBubblePosition] = useState({ x: 0, y: 0 });
   const speechBubbleOpacity = useRef(new Animated.Value(0)).current;
+  const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
 
   // Log when component mounts and unmounts
   useEffect(() => {
@@ -225,7 +226,7 @@ export function PlantView({ plant, plotIndex = 0, onLogout }: PlantViewProps) {
       
       try {
         console.log('Loading chat history for plot:', plotIndex);
-        const history = await loadChatHistory(plotIndex.toString());
+        const history = await loadChatHistory(plotIndex);
         console.log('Loaded chat history:', history.length, 'messages');
         setMessages(history);
 
@@ -307,7 +308,7 @@ export function PlantView({ plant, plotIndex = 0, onLogout }: PlantViewProps) {
       showSpeechBubble('...');
       
       // Get plant's response using plotIndex
-      const plantResponse = await sendMessageToPlant(plotIndex.toString(), cleanInput, plant);
+      const plantResponse = await sendMessageToPlant(plotIndex, cleanInput, plant);
       
       // Create plant message
       const plantMessage: Message = {
@@ -348,7 +349,7 @@ export function PlantView({ plant, plotIndex = 0, onLogout }: PlantViewProps) {
       
       try {
         console.log('Saving chat history:', messages.length, 'messages');
-        await saveChatHistory(plotIndex.toString(), messages);
+        await saveChatHistory(plotIndex, messages);
         console.log('Chat history saved');
       } catch (error) {
         console.error('Error saving chat history:', error);
@@ -358,9 +359,30 @@ export function PlantView({ plant, plotIndex = 0, onLogout }: PlantViewProps) {
     saveHistory();
   }, [messages, plant, plotIndex]);
 
+  // Add keyboard listeners
+  useEffect(() => {
+    const keyboardWillShow = Keyboard.addListener('keyboardWillShow', () => setIsKeyboardOpen(true));
+    const keyboardWillHide = Keyboard.addListener('keyboardWillHide', () => setIsKeyboardOpen(false));
+
+    return () => {
+      keyboardWillShow.remove();
+      keyboardWillHide.remove();
+    };
+  }, []);
+
   return (
     <View style={[styles.container, { width: window.width }]}>
-      <View {...panResponder.panHandlers} style={styles.fullSize}>
+      {/* Keyboard dismiss overlay - only shown when keyboard is open */}
+      {isKeyboardOpen && (
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <View style={styles.keyboardDismissOverlay} />
+        </TouchableWithoutFeedback>
+      )}
+
+      <View {...panResponder.panHandlers} style={[
+        styles.fullSize,
+        isKeyboardOpen && { paddingBottom: Platform.OS === 'ios' ? 44 : 0 }
+      ]}>
         <GLView
           style={[styles.fullSize, { width: window.width }]}
           onContextCreate={onContextCreate}
@@ -436,48 +458,53 @@ export function PlantView({ plant, plotIndex = 0, onLogout }: PlantViewProps) {
 
       {/* Chat input overlay - hide when history is shown */}
       {!showHistory && (
-        <SafeAreaView 
+        <KeyboardAvoidingView 
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={0}
           style={styles.chatOverlay}
-          edges={['bottom']}
         >
-          {/* Last two messages */}
-          {messages.length > 0 && (
-            <View style={styles.lastMessagesContainer}>
-              {messages.slice(-2).map((msg, i) => (
-                <View key={msg.id} style={[
-                  styles.lastMessage,
-                  msg.sender === 'plant' ? styles.plantLastMessage : styles.userLastMessage
-                ]}>
-                  <AppText style={msg.sender === 'plant' ? styles.lastMessageText : styles.userMessageText}>
-                    {msg.content}
-                  </AppText>
+          <SafeAreaView edges={isKeyboardOpen ? [] : ['bottom']} style={isKeyboardOpen ? styles.keyboardOpenContainer : undefined}>
+            <View style={styles.chatContent}>
+              {/* Last two messages */}
+              {messages.length > 0 && (
+                <View style={styles.lastMessagesContainer}>
+                  {messages.slice(-2).map((msg, i) => (
+                    <View key={msg.id} style={[
+                      styles.lastMessage,
+                      msg.sender === 'plant' ? styles.plantLastMessage : styles.userLastMessage
+                    ]}>
+                      <AppText style={msg.sender === 'plant' ? styles.lastMessageText : styles.userMessageText}>
+                        {msg.content}
+                      </AppText>
+                    </View>
+                  ))}
                 </View>
-              ))}
+              )}
+              
+              <View style={styles.inputContainer}>
+                <TextInput
+                  style={styles.input}
+                  value={input}
+                  onChangeText={value => {
+                    if (value.includes('\n')) {
+                      handleSend();
+                    } else {
+                      setInput(value);
+                    }
+                  }}
+                  placeholder={isMessageLoading ? "plant is thinking..." : "type a message..."}
+                  placeholderTextColor="#666666"
+                  onSubmitEditing={handleSend}
+                  editable={!isMessageLoading}
+                  returnKeyType="send"
+                  blurOnSubmit={false}
+                  multiline
+                  autoCapitalize="none"
+                />
+              </View>
             </View>
-          )}
-          
-          <View style={styles.inputContainer}>
-            <TextInput
-              style={styles.input}
-              value={input}
-              onChangeText={value => {
-                if (value.includes('\n')) {
-                  handleSend();
-                } else {
-                  setInput(value);
-                }
-              }}
-              placeholder={isMessageLoading ? "plant is thinking..." : "type a message..."}
-              placeholderTextColor="#666666"
-              onSubmitEditing={handleSend}
-              editable={!isMessageLoading}
-              returnKeyType="send"
-              blurOnSubmit={false}
-              multiline
-              autoCapitalize="none"
-            />
-          </View>
-        </SafeAreaView>
+          </SafeAreaView>
+        </KeyboardAvoidingView>
       )}
 
       {/* History overlay */}
@@ -556,9 +583,13 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
     zIndex: 50,
   },
+  chatContent: {
+    width: '100%',
+    paddingBottom: Platform.OS === 'ios' ? 8 : 4,
+  },
   inputContainer: {
     marginHorizontal: 10,
-    marginVertical: 16,
+    marginVertical: 4,
   },
   input: {
     backgroundColor: '#ffffff',
@@ -655,7 +686,8 @@ const styles = StyleSheet.create({
   },
   lastMessagesContainer: {
     width: '100%',
-    padding: 10,
+    paddingHorizontal: 10,
+    paddingBottom: 8,
     gap: 8,
   },
   lastMessage: {
@@ -690,5 +722,16 @@ const styles = StyleSheet.create({
     left: 0,
     top: 0,
     padding: 16,
+  },
+  keyboardOpenContainer: {
+    paddingBottom: Platform.OS === 'ios' ? 8 : 4,
+  },
+  keyboardDismissOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 1000,
   },
 }); 
