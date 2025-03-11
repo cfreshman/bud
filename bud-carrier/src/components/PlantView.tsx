@@ -381,7 +381,6 @@ export function PlantView({ plant, plotIndex = 0, onLogout }: PlantViewProps) {
 
       <View {...panResponder.panHandlers} style={[
         styles.fullSize,
-        isKeyboardOpen && { paddingBottom: Platform.OS === 'ios' ? 44 : 0 }
       ]}>
         <GLView
           style={[styles.fullSize, { width: window.width }]}
@@ -486,6 +485,7 @@ export function PlantView({ plant, plotIndex = 0, onLogout }: PlantViewProps) {
                   style={styles.input}
                   value={input}
                   onChangeText={value => {
+                    if (isMessageLoading) return;
                     if (value.includes('\n')) {
                       handleSend();
                     } else {
@@ -495,7 +495,6 @@ export function PlantView({ plant, plotIndex = 0, onLogout }: PlantViewProps) {
                   placeholder={isMessageLoading ? "plant is thinking..." : "type a message..."}
                   placeholderTextColor="#666666"
                   onSubmitEditing={handleSend}
-                  editable={!isMessageLoading}
                   returnKeyType="send"
                   blurOnSubmit={false}
                   multiline
