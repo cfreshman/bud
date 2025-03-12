@@ -19,22 +19,17 @@ export function MobileView() {
       <div className="mobile-content">
         <div className="message-bubble">
           <p>get the bud carrier app!</p>
-          <p>only available on iOS</p>
+          <p>available on iOS TestFlight</p>
         </div>
-        <button 
-          onClick={(e) => {
-            e.preventDefault();
-            alert('coming soon!');
-          }}
+        <a 
+          href="https://testflight.apple.com/join/ChMubZNX"
+          target="_blank"
+          rel="noopener noreferrer"
           className="download-button"
         >
           bud 🌱 download
-        </button>
+        </a>
       </div>
-
-      <br />
-      <br />
-      <br />
       
     </div>
   );
