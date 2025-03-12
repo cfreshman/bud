@@ -165,35 +165,9 @@ convert icon.png -resize 200x200 bud-carrier/ios/budcarrier/Images.xcassets/Spla
 convert icon.png -resize 400x400 bud-carrier/ios/budcarrier/Images.xcassets/SplashScreenLogo.imageset/image@2x.png
 convert icon.png -resize 600x600 bud-carrier/ios/budcarrier/Images.xcassets/SplashScreenLogo.imageset/image@3x.png
 
-# iOS splash screen background color
-mkdir -p bud-carrier/ios/budcarrier/Images.xcassets/SplashScreenBackground.colorset
-cat > bud-carrier/ios/budcarrier/Images.xcassets/SplashScreenBackground.colorset/Contents.json << EOL
-{
-  "colors": [
-    {
-      "color": {
-        "color-space": "srgb",
-        "components": {
-          "alpha": "1.000",
-          "red": "0.533",
-          "green": "0.667",
-          "blue": "0.600"
-        }
-      },
-      "idiom": "universal"
-    }
-  ],
-  "info": {
-    "author": "xcode",
-    "version": 1
-  }
-}
-EOL
-
 # Expo splash screen
 convert icon.png -resize 1024x1024 \
-  -background '#88aa99' -gravity center \
-  -extent 1242x2436 \
+  -background '#88aa99' \
   bud-carrier/assets/splash-icon.png
 
 # Web icons

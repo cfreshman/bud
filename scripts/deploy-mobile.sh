@@ -2,20 +2,24 @@
 set -e
 
 echo "Building standalone mobile app..."
+echo "Note: If you need to clean build artifacts first, run ./scripts/clean.sh"
 
 # Navigate to mobile directory
 cd bud-carrier
 
-# Install
+# Install dependencies
 npm install
 
-# Generate fresh native iOS project
-npx expo prebuild -p ios
+# Generate native iOS project
+npx expo prebuild -p ios --no-install
 
 # Install CocoaPods dependencies
 cd ios
 pod install
 cd ..
+
+# Build iOS project
+npx expo run:ios --no-install
 
 echo "iOS project generated! To create production build:"
 echo "1. Open bud-carrier/ios/budcarrier.xcworkspace in Xcode"
