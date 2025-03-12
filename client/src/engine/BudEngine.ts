@@ -1505,56 +1505,23 @@ export class BudEngine extends EngineUtils {
     }
   }
 
-  protected serializePlant(): string {
-    const rootData = Array.from(this.roots).map(rootId => {
-      const body = Array.from(this.bodies.values()).find(b => b.rootPartId === rootId)
-      return {
-        partData: this.serializePart(rootId),
-        transform: body ? {
-          position: body.transform.position.toArray(),
-          up: body.transform.up.toArray(),
-          right: body.transform.right.toArray(),
-          forward: body.transform.forward.toArray()
-        } : undefined
-      }
-    })
-    return JSON.stringify(rootData)
+  public isBodyOnMainPot(body: Body): boolean {
+    if (!this.mainPot || !this.mainDirt) return false
+    
+    const bodyPos = body.transform.position
+    const potPos = this.mainPot.position
+    
+    // Check if body is within dirt radius and at/above planting height
+    const horizontalDist = Math.sqrt(
+      Math.pow(bodyPos.x - potPos.x, 2) + 
+      Math.pow(bodyPos.z - potPos.z, 2)
+    )
+    
+    return horizontalDist <= 0.5 && // Dirt radius
+           bodyPos.y >= this.plantingArea.y // At or above planting height
   }
 
-  protected serializePart(partId: string): any {
-    const part = this.parts.get(partId)
-    if (!part) return null
-
-    const bones = part.boneIds.map(boneId => {
-      const bone = this.bones.get(boneId)
-      if (!bone) return null
-
-      // Get all child parts of this bone
-      const children = Array.from(bone.children.entries()).map(([childId, attachment]) => {
-        const childData = this.serializePart(childId)
-        if (!childData) return null
-        return {
-          attachment,
-          part: childData
-        }
-      }).filter(x => x !== null)
-
-      return {
-        length: bone.length,
-        width: bone.width,
-        isHead: bone.isHead,
-        direction: bone.direction.toArray(),
-        twist: bone.twist,
-        children
-      }
-    })
-
-    return {
-      type: part.type,
-      attributes: part.attributes,
-      bones
-    }
-  }
+  // Removed unused serializePlant and serializePart methods - now using plantSaveUtils.ts instead
 
   // Load a serialized plant
   loadPlant(serializedData: string) {
