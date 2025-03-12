@@ -836,13 +836,18 @@ export class BudEngine extends EngineUtils {
     // Check if we're hovering over a stem bone
     this.raycaster.setFromCamera(this.mouse, this.camera)
     
-    // Get all stem meshes from scene, excluding meshes from the active part's hierarchy
-    const stemMeshes: THREE.Mesh[] = []
+    // Create array of valid surfaces to drag onto
+    const validSurfaces: THREE.Object3D[] = []
     
+    // Add ground plane and pots
+    if (this.groundPlane) validSurfaces.push(this.groundPlane)
+    if (this.mainPot) validSurfaces.push(this.mainPot)
+    if (this.mainDirt) validSurfaces.push(this.mainDirt)
+    validSurfaces.push(...Array.from(this.partPots.values()))
+
+    // Add all stem meshes that aren't part of the active part's hierarchy
     this.scene.traverse(child => {
       if (!(child instanceof THREE.Mesh)) return
-      
-      // Must have a boneId to be a plant part
       if (!child.userData.boneId) return
       
       // Skip if mesh belongs to active part or its parents
@@ -860,150 +865,123 @@ export class BudEngine extends EngineUtils {
       
       // Only allow attaching to stems
       if (bonePart.type === 'stem') {
-        stemMeshes.push(child)
+        validSurfaces.push(child)
       }
     })
+
+    const intersects = this.raycaster.intersectObjects(validSurfaces, false)
     
-    const boneIntersects = this.raycaster.intersectObjects(stemMeshes)
-    
-    if (boneIntersects.length > 0) {
-      const hitMesh = boneIntersects[0].object
-      if (!(hitMesh instanceof THREE.Mesh)) return
+    if (intersects.length > 0) {
+      const intersection = intersects[0].point
+      
+      // If we hit a stem mesh, handle attachment
+      const hitMesh = intersects[0].object
+      if (hitMesh instanceof THREE.Mesh && hitMesh.userData.boneId) {
+        // Find corresponding bone
+        const parentBone = this.bones.get(hitMesh.userData.boneId)
+        if (!parentBone) return
 
-      // Find corresponding bone
-      const parentBone = this.bones.get(hitMesh.userData.boneId)
-      if (!parentBone) return
-
-      const parentPart = this.parts.get(parentBone.partId)
-      if (parentPart?.type === 'stem') {
-        // Store the currently selected part ID before making changes
-        const selectedPartId = this.activePartId
-        
-        // Remove from roots since it's getting a parent
-        this.roots.delete(part.id)
-
-        // Get transform from stored map instead of recalculating
-        const boneTransform = this.boneTransforms.get(parentBone.id)
-        if (!boneTransform) return
-
-        // Extract transform data
-        const boneStart = new THREE.Vector3().setFromMatrixPosition(boneTransform)
-        const right = new THREE.Vector3()
-        const up = new THREE.Vector3()
-        const forward = new THREE.Vector3()
-        boneTransform.extractBasis(right, up, forward)
-        const boneLength = parentBone.length
-        
-        // Calculate ratio along parent bone using world space positions
-        const hitPoint = boneIntersects[0].point
-        
-        // Project hit point onto bone line to get closest point
-        const toHit = new THREE.Vector3().subVectors(hitPoint, boneStart)
-        const projectedDistance = toHit.dot(up)
-        const ratio = projectedDistance / boneLength
-        
-        // If ratio is very close to either end, snap to that end
-        const SNAP_THRESHOLD = 0.03 // 3% threshold for snapping to ends
-        const isStartAttachment = ratio <= SNAP_THRESHOLD
-        const isEndAttachment = ratio >= (1.0 - SNAP_THRESHOLD)
-        const clampedRatio = isStartAttachment ? 0.0 : isEndAttachment ? 1.0 : Math.max(0, Math.min(1, ratio))
-        
-        // Calculate attachment point on bone
-        const attachPoint = boneStart.clone().add(up.clone().multiplyScalar(clampedRatio * boneLength))
-        
-        // Calculate vector from attachment point to mouse in bone's local space
-        const toMouse = new THREE.Vector3().subVectors(worldPosition, attachPoint)
-        
-        // Create inverse rotation matrix to transform toMouse into bone's local space
-        const inverseRotation = boneTransform.clone()
-        inverseRotation.setPosition(new THREE.Vector3(0, 0, 0))
-        inverseRotation.invert()
-        
-        // Transform toMouse into bone's local space
-        const localToMouse = toMouse.clone().applyMatrix4(inverseRotation)
-        
-        // Project onto XZ plane in local space
-        localToMouse.y = 0
-        localToMouse.normalize()
-        
-        // Calculate angle in local XZ plane
-        const angle = Math.atan2(localToMouse.z, localToMouse.x)
-        
-        console.log({ ratio, isStartAttachment, isEndAttachment, clampedRatio, degrees: angle * (180 / Math.PI) })
-        
-        // Remove from old parent if exists
-        if (part.parentBoneId) {
-          const oldParentBone = this.bones.get(part.parentBoneId)
-          if (oldParentBone) {
-            oldParentBone.children.delete(part.id)
-          }
-        }
-
-        // Update parent bone's children
-        parentBone.children.set(part.id, {
-          partId: part.id,
-          ratio: clampedRatio,
-          angle: angle
-        })
-
-        // Update part's parent reference
-        part.parentBoneId = parentBone.id
-
-        // Find root part and render entire body
-        let rootPart = parentPart
-        while (rootPart.parentBoneId) {
-          const parentBone = this.bones.get(rootPart.parentBoneId)
-          if (!parentBone) break
-          const nextPart = this.parts.get(parentBone.partId)
-          if (!nextPart) break
-          rootPart = nextPart
-        }
-        if (rootPart && rootPart.id) {
-          this.renderBody(rootPart.id)
+        const parentPart = this.parts.get(parentBone.partId)
+        if (parentPart?.type === 'stem') {
+          // Store the currently selected part ID before making changes
+          const selectedPartId = this.activePartId
           
-          // After rendering, find the new group for our selected part
-          const newPartGroup = this.findPartGroup(selectedPartId)
-          if (newPartGroup) {
-            this.outlinePass.selectedObjects = [newPartGroup]
-            this.composer.render()
+          // Remove from roots since it's getting a parent
+          this.roots.delete(part.id)
+
+          // Get transform from stored map instead of recalculating
+          const boneTransform = this.boneTransforms.get(parentBone.id)
+          if (!boneTransform) return
+
+          // Extract transform data
+          const boneStart = new THREE.Vector3().setFromMatrixPosition(boneTransform)
+          const right = new THREE.Vector3()
+          const up = new THREE.Vector3()
+          const forward = new THREE.Vector3()
+          boneTransform.extractBasis(right, up, forward)
+          const boneLength = parentBone.length
+          
+          // Calculate ratio along parent bone using world space positions
+          const hitPoint = intersects[0].point
+          
+          // Project hit point onto bone line to get closest point
+          const toHit = new THREE.Vector3().subVectors(hitPoint, boneStart)
+          const projectedDistance = toHit.dot(up)
+          const ratio = projectedDistance / boneLength
+          
+          // If ratio is very close to either end, snap to that end
+          const SNAP_THRESHOLD = 0.03 // 3% threshold for snapping to ends
+          const isStartAttachment = ratio <= SNAP_THRESHOLD
+          const isEndAttachment = ratio >= (1.0 - SNAP_THRESHOLD)
+          const clampedRatio = isStartAttachment ? 0.0 : isEndAttachment ? 1.0 : Math.max(0, Math.min(1, ratio))
+          
+          // Calculate attachment point on bone
+          const attachPoint = boneStart.clone().add(up.clone().multiplyScalar(clampedRatio * boneLength))
+          
+          // Calculate vector from attachment point to mouse in bone's local space
+          const toMouse = new THREE.Vector3().subVectors(worldPosition, attachPoint)
+          
+          // Create inverse rotation matrix to transform toMouse into bone's local space
+          const inverseRotation = boneTransform.clone()
+          inverseRotation.setPosition(new THREE.Vector3(0, 0, 0))
+          inverseRotation.invert()
+          
+          // Transform toMouse into bone's local space
+          const localToMouse = toMouse.clone().applyMatrix4(inverseRotation)
+          
+          // Project onto XZ plane in local space
+          localToMouse.y = 0
+          localToMouse.normalize()
+          
+          // Calculate angle in local XZ plane
+          const angle = Math.atan2(localToMouse.z, localToMouse.x)
+          
+          console.log({ ratio, isStartAttachment, isEndAttachment, clampedRatio, degrees: angle * (180 / Math.PI) })
+          
+          // Remove from old parent if exists
+          if (part.parentBoneId) {
+            const oldParentBone = this.bones.get(part.parentBoneId)
+            if (oldParentBone) {
+              oldParentBone.children.delete(part.id)
+            }
+          }
+
+          // Update parent bone's children
+          parentBone.children.set(part.id, {
+            partId: part.id,
+            ratio: clampedRatio,
+            angle: angle
+          })
+
+          // Update part's parent reference
+          part.parentBoneId = parentBone.id
+
+          // Find root part and render entire body
+          let rootPart = parentPart
+          while (rootPart.parentBoneId) {
+            const parentBone = this.bones.get(rootPart.parentBoneId)
+            if (!parentBone) break
+            const nextPart = this.parts.get(parentBone.partId)
+            if (!nextPart) break
+            rootPart = nextPart
+          }
+          if (rootPart && rootPart.id) {
+            this.renderBody(rootPart.id)
+            
+            // After rendering, find the new group for our selected part
+            const newPartGroup = this.findPartGroup(selectedPartId)
+            if (newPartGroup) {
+              this.outlinePass.selectedObjects = [newPartGroup]
+              this.composer.render()
+            }
           }
         }
-      }
-    } else {
-      // Store the currently selected part ID before making changes
-      const selectedPartId = this.activePartId
-      
-      // Detaching from parent or initial drag
-      if (part.parentBoneId) {
-        const oldParentBone = this.bones.get(part.parentBoneId)
-        if (oldParentBone) {
-          oldParentBone.children.delete(part.id)
+      } else {
+        // Just update position for ground/pot hits
+        if (activeBody) {
+          activeBody.transform.position.copy(intersection)
+          this.renderBody(activeBody.id)
         }
-        part.parentBoneId = undefined
-
-        // Add back to roots since it's detached
-        this.roots.add(part.id)
-        
-        // Create new body for detached part
-        this.createBodyForPart(part.id)
-        
-        // Render the updated body
-        this.renderBody(part.id)
-        
-        // After rendering, find the new group for our selected part
-        const newPartGroup = this.findPartGroup(selectedPartId)
-        if (newPartGroup) {
-          this.outlinePass.selectedObjects = [newPartGroup]
-          this.composer.render()
-        }
-      }
-      
-      // Update body position
-      if (activeBody) {
-        activeBody.transform.position.copy(worldPosition)
-        
-        // Render the updated body
-        this.renderBody(activeBody.id)
       }
     }
   }
