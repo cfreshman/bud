@@ -8,7 +8,13 @@ const { notifyPlantCarryUpdate } = require('../services/websocket')
 // Get all plants for user
 router.get('/', auth, async (req, res) => {
   try {
+    console.log('GET plants called for userId:', req.user.userId)
     const plants = await Plant.find({ userId: req.user.userId })
+    console.log('Found plants:', plants.map(p => ({
+      plotIndex: p.plotIndex,
+      shareId: p.shareId,
+      isCarried: p.isCarried
+    })))
     
     // Convert to Map format expected by client
     const plantsMap = {}
@@ -16,9 +22,16 @@ router.get('/', auth, async (req, res) => {
       plantsMap[plant.plotIndex] = {
         plotIndex: plant.plotIndex,
         serializedPlant: plant.serializedPlant,
-        isCarried: plant.isCarried || false
+        isCarried: plant.isCarried || false,
+        shareId: plant.shareId
       }
     })
+    
+    console.log('Sending plants to client:', Object.values(plantsMap).map(p => ({
+      plotIndex: p.plotIndex,
+      shareId: p.shareId,
+      isCarried: p.isCarried
+    })))
     
     res.json(plantsMap)
   } catch (error) {
@@ -35,13 +48,18 @@ router.put('/:plotIndex', auth, async (req, res) => {
       return res.status(400).json({ message: 'invalid plot index' })
     }
 
+    // Find existing plant to preserve shareId
+    const existingPlant = await Plant.findOne({ userId: req.user.userId, plotIndex })
+    
     const plant = await Plant.findOneAndUpdate(
       { userId: req.user.userId, plotIndex },
       { 
         userId: req.user.userId,
         plotIndex,
         serializedPlant: req.body.serializedPlant,
-        isCarried: req.body.isCarried || false
+        isCarried: req.body.isCarried || false,
+        // Preserve shareId if it exists
+        ...(existingPlant?.shareId && { shareId: existingPlant.shareId })
       },
       { upsert: true, new: true }
     )
@@ -225,6 +243,145 @@ router.post('/:plotIndex/uncarry', auth, async (req, res) => {
   } catch (error) {
     console.error('Failed to uncarry plant:', error)
     res.status(500).json({ message: 'error uncarrying plant' })
+  }
+})
+
+// Share a plant
+router.post('/:plotIndex/share', auth, async (req, res) => {
+  console.log('Share endpoint called:', {
+    plotIndex: req.params.plotIndex,
+    userId: req.user.userId
+  })
+  
+  try {
+    const plotIndex = parseInt(req.params.plotIndex)
+    if (isNaN(plotIndex) || plotIndex < 0 || plotIndex > 5) {
+      console.log('Invalid plot index:', plotIndex)
+      return res.status(400).json({ message: 'invalid plot index' })
+    }
+
+    // First verify the plant exists
+    const existingPlant = await Plant.findOne({ userId: req.user.userId, plotIndex })
+    console.log('Found existing plant:', {
+      found: !!existingPlant,
+      plotIndex: existingPlant?.plotIndex,
+      currentShareId: existingPlant?.shareId
+    })
+
+    if (!existingPlant) {
+      console.log('Plant not found')
+      return res.status(404).json({ message: 'plant not found' })
+    }
+
+    const shareId = Math.random().toString(36).substring(2, 15)
+    console.log('Generated shareId:', shareId)
+    
+    // Update with new options to ensure proper update
+    const plant = await Plant.findOneAndUpdate(
+      { userId: req.user.userId, plotIndex },
+      { $set: { shareId } },
+      { new: true, runValidators: true }
+    )
+
+    console.log('Updated plant:', {
+      found: !!plant,
+      plotIndex: plant?.plotIndex,
+      shareId: plant?.shareId,
+      fullDoc: plant
+    })
+
+    if (!plant) {
+      console.log('Plant not found after update')
+      return res.status(404).json({ message: 'plant not found' })
+    }
+
+    // Verify the update worked
+    const verifyPlant = await Plant.findOne({ userId: req.user.userId, plotIndex })
+    console.log('Verified plant after update:', {
+      found: !!verifyPlant,
+      plotIndex: verifyPlant?.plotIndex,
+      shareId: verifyPlant?.shareId
+    })
+
+    console.log('Share successful, sending response')
+    res.json({ shareId })
+  } catch (error) {
+    console.error('Failed to share plant:', error)
+    res.status(500).json({ message: 'error sharing plant' })
+  }
+})
+
+// Unshare a plant
+router.post('/:plotIndex/unshare', auth, async (req, res) => {
+  try {
+    const plotIndex = parseInt(req.params.plotIndex)
+    if (isNaN(plotIndex) || plotIndex < 0 || plotIndex > 5) {
+      return res.status(400).json({ message: 'invalid plot index' })
+    }
+
+    const plant = await Plant.findOneAndUpdate(
+      { userId: req.user.userId, plotIndex },
+      { $unset: { shareId: "" } },
+      { new: true }
+    )
+
+    if (!plant) {
+      return res.status(404).json({ message: 'plant not found' })
+    }
+
+    res.json({ message: 'plant unshared' })
+  } catch (error) {
+    console.error('Failed to unshare plant:', error)
+    res.status(500).json({ message: 'error unsharing plant' })
+  }
+})
+
+// Get shared plant
+router.get('/shared/:shareId', auth, async (req, res) => {
+  try {
+    const { shareId } = req.params
+    
+    // Find the shared plant
+    const plant = await Plant.findOne({ shareId })
+    if (!plant) {
+      return res.status(404).json({ message: 'shared plant not found' })
+    }
+
+    // Find an empty plot for the current user
+    const userPlants = await Plant.find({ userId: req.user.userId })
+    const occupiedPlots = new Set(userPlants.map(p => p.plotIndex))
+    let emptyPlotIndex = -1
+    for (let i = 0; i < 6; i++) {
+      if (!occupiedPlots.has(i)) {
+        emptyPlotIndex = i
+        break
+      }
+    }
+
+    // If no empty plots, return error
+    if (emptyPlotIndex === -1) {
+      return res.status(400).json({ message: 'no empty plots available' })
+    }
+
+    // Create a copy of the plant in the empty plot
+    const newPlant = new Plant({
+      userId: req.user.userId,
+      plotIndex: emptyPlotIndex,
+      serializedPlant: plant.serializedPlant
+    })
+    await newPlant.save()
+
+    // Delete the original plant from the owner's greenhouse
+    await Plant.deleteOne({ userId: plant.userId, plotIndex: plant.plotIndex })
+    await ChatHistory.deleteOne({ userId: plant.userId, plotIndex: plant.plotIndex })
+
+    res.json({ 
+      plotIndex: emptyPlotIndex,
+      serializedPlant: plant.serializedPlant
+    })
+  } catch (error) {
+    console.error('Failed to get shared plant:', error)
+    res.status(500).json({ message: 'error getting shared plant' })
   }
 })
 

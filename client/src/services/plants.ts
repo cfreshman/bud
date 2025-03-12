@@ -33,6 +33,7 @@ export async function loadPlants(): Promise<Map<number, PlantData>> {
   const token = getToken()
   if (!token) throw new Error('not authenticated')
 
+  console.log('Loading plants from server...')
   const response = await fetch(`${API_URL}/plants`, {
     headers: {
       'Authorization': `Bearer ${token}`
@@ -45,14 +46,19 @@ export async function loadPlants(): Promise<Map<number, PlantData>> {
   }
 
   const plants = await response.json()
+  console.log('Raw plants from server:', plants)
+  
   return new Map(
     Object.entries(plants).map(([key, value]) => {
-      const serverValue = value as { serializedPlant: string, isCarried: boolean }
+      const serverValue = value as { serializedPlant: string, isCarried: boolean, shareId?: string }
+      console.log('Processing plant:', { plotIndex: key, shareId: serverValue.shareId })
       if (!serverValue.serializedPlant) {
         throw new Error('Invalid plant data received from server')
       }
       const plantData = deserializePlantData(serverValue.serializedPlant)
       plantData.isCarried = serverValue.isCarried
+      plantData.shareId = serverValue.shareId
+      console.log('Processed plant:', { plotIndex: key, shareId: plantData.shareId })
       return [parseInt(key), plantData]
     })
   )

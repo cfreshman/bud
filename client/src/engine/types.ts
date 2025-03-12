@@ -54,4 +54,5 @@ export interface PlantData {
   bodies: Map<string, Body>
   roots: Set<string>
   isCarried?: boolean
+  shareId?: string
 } 

@@ -190,25 +190,57 @@ export class ViewEngine extends EngineUtils {
         parts: new Map(plantData.parts),
         bones: new Map(plantData.bones),
         bodies: new Map(plantData.bodies),
-        roots: new Set(plantData.roots)
+        roots: new Set(plantData.roots),
+        shareId: plantData.shareId,
+        isCarried: plantData.isCarried
       })
+
+      // Update pot color based on state
+      const potMesh = plot.children.find(child => child instanceof THREE.Mesh) as THREE.Mesh
+      if (potMesh && potMesh.material instanceof THREE.MeshStandardMaterial) {
+        if (plantData.shareId) {
+          potMesh.material.color.setHex(0x4477ff) // Blue for shared
+          potMesh.material.opacity = 0.8
+        } else if (plantData.isCarried) {
+          potMesh.material.color.setHex(0xFFD700) // Gold for carried
+          potMesh.material.opacity = 0.8
+        } else {
+          potMesh.material.color.setHex(0x8B5E3C) // Default brown
+          potMesh.material.opacity = 0.6
+        }
+      }
 
       // Create offset version for initial render
       const offsetData = this.createOffsetPlantData(plantData, plot.position)
       this.renderPlant(offsetData)
     } else {
+      // Reset pot color to default
+      const plot = this.plots[plotIndex]
+      if (plot) {
+        const potMesh = plot.children.find(child => child instanceof THREE.Mesh) as THREE.Mesh
+        if (potMesh && potMesh.material instanceof THREE.MeshStandardMaterial) {
+          potMesh.material.color.setHex(0x8B5E3C)
+          potMesh.material.opacity = 0.6
+        }
+      }
       // Clear from active plots
       this.activePlots.delete(plotIndex)
     }
   }
 
   setCarriedPlot(plotIndex: number | null) {
-    // Reset all plots to normal appearance
+    // Reset all plots to their appropriate colors
     this.plots.forEach((plot, index) => {
       const potMesh = plot.children.find(child => child instanceof THREE.Mesh) as THREE.Mesh
       if (potMesh && potMesh.material instanceof THREE.MeshStandardMaterial) {
-        potMesh.material.color.setHex(0x8B5E3C)
-        potMesh.material.opacity = 0.6
+        const plantData = this.activePlots.get(index)
+        if (plantData?.shareId) {
+          potMesh.material.color.setHex(0x4477ff) // Keep blue for shared
+          potMesh.material.opacity = 0.8
+        } else {
+          potMesh.material.color.setHex(0x8B5E3C) // Default brown
+          potMesh.material.opacity = 0.6
+        }
       }
     })
 
@@ -222,6 +254,17 @@ export class ViewEngine extends EngineUtils {
         potMesh.material.color.setHex(0xFFD700) // Gold color
         potMesh.material.opacity = 0.8
       }
+    }
+  }
+
+  setSharedPlot(plotIndex: number) {
+    const plot = this.plots[plotIndex]
+    if (!plot) return
+
+    const potMesh = plot.children.find(child => child instanceof THREE.Mesh) as THREE.Mesh
+    if (potMesh && potMesh.material instanceof THREE.MeshStandardMaterial) {
+      potMesh.material.color.setHex(0x4477ff) // Blue color
+      potMesh.material.opacity = 0.8
     }
   }
 

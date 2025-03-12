@@ -77,4 +77,53 @@ export async function uncarryPlant(plotIndex: string): Promise<void> {
   if (!response.ok) {
     throw new Error('Failed to uncarry plant')
   }
+}
+
+export async function sharePlant(plotIndex: string): Promise<{ shareId: string }> {
+  console.log('Attempting to share plant:', { plotIndex })
+  const token = getToken()
+  if (!token) throw new Error('not authenticated')
+
+  console.log('Making share API call to:', `${API_URL}/plants/${plotIndex}/share`)
+  const response = await fetch(`${API_URL}/plants/${plotIndex}/share`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    }
+  })
+
+  console.log('Share API response:', { 
+    ok: response.ok, 
+    status: response.status,
+    statusText: response.statusText 
+  })
+
+  if (!response.ok) {
+    const error = await response.json()
+    console.error('Share API error:', error)
+    throw new Error(error.message || 'failed to share plant')
+  }
+
+  const result = await response.json()
+  console.log('Share API success:', result)
+  return result
+}
+
+export async function unsharePlant(plotIndex: string): Promise<void> {
+  const token = getToken()
+  if (!token) throw new Error('not authenticated')
+
+  const response = await fetch(`${API_URL}/plants/${plotIndex}/unshare`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    }
+  })
+
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(error.message || 'failed to unshare plant')
+  }
 } 

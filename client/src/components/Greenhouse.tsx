@@ -5,16 +5,18 @@ import { deserializePlantData } from '../utils/plantSaveUtils'
 import { PlotMenu } from './PlotMenu'
 import { ChatView } from './ChatView'
 import { removeToken } from '../services/auth'
-import { carryPlant, uncarryPlant } from '../services/api'
+import { carryPlant, uncarryPlant, sharePlant, unsharePlant } from '../services/api'
+import { loadPlants } from '../services/plants'
 
 interface GreenhouseProps {
   plants: Map<number, PlantData>
   onSelectPlot: (plotIndex: number) => void
   onStartChat: (plotIndex: number) => void
   onLogout: () => void
+  onPlantsChange?: (plants: Map<number, PlantData>) => void
 }
 
-export function Greenhouse({ plants, onSelectPlot, onStartChat, onLogout }: GreenhouseProps) {
+export function Greenhouse({ plants, onSelectPlot, onStartChat, onLogout, onPlantsChange }: GreenhouseProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const engineRef = useRef<ViewEngine | null>(null)
   const cleanupRef = useRef(false)
@@ -128,6 +130,60 @@ export function Greenhouse({ plants, onSelectPlot, onStartChat, onLogout }: Gree
     }
   }, [carriedPlotIndex])
 
+  const handleSharePlant = async (plotIndex: number) => {
+    console.log('handleSharePlant called:', { plotIndex })
+    try {
+      const plant = plants.get(plotIndex)
+      if (!plant) {
+        console.log('No plant found for plot:', plotIndex)
+        return
+      }
+
+      console.log('Calling sharePlant API...')
+      await sharePlant(plotIndex.toString())
+      
+      console.log('Loading updated plants...')
+      const updatedPlants = await loadPlants()
+      console.log('Updated plants:', {
+        count: updatedPlants.size,
+        plots: Array.from(updatedPlants.keys()),
+        shared: Array.from(updatedPlants.values()).filter(p => p.shareId).length
+      })
+      
+      if (onPlantsChange) {
+        console.log('Calling onPlantsChange...')
+        onPlantsChange(updatedPlants)
+      }
+    } catch (error) {
+      console.error('Failed to share plant:', error)
+    }
+  }
+
+  const handleUnsharePlant = async (plotIndex: number) => {
+    try {
+      const plant = plants.get(plotIndex)
+      if (!plant) return
+
+      await unsharePlant(plotIndex.toString())
+      
+      // Reload plants to get updated shareId
+      const updatedPlants = await loadPlants()
+      if (onPlantsChange) {
+        onPlantsChange(updatedPlants)
+      }
+    } catch (error) {
+      console.error('Failed to unshare plant:', error)
+    }
+  }
+
+  const handleCopyLink = (plotIndex: number) => {
+    const plant = plants.get(plotIndex)
+    if (!plant?.shareId) return
+
+    const shareUrl = `${window.location.origin}/shared/${plant.shareId}`
+    navigator.clipboard.writeText(shareUrl)
+  }
+
   // Show ChatView when chatState is set
   if (chatState) {
     return (
@@ -167,7 +223,9 @@ export function Greenhouse({ plants, onSelectPlot, onStartChat, onLogout }: Gree
             <PlotMenu
               position={menuState.position}
               isCarried={carriedPlotIndex === menuState.plotIndex}
+              shareId={plants.get(menuState.plotIndex)?.shareId}
               onSelect={(action) => {
+                console.log('Plot menu action selected:', { action, plotIndex: menuState.plotIndex })
                 if (action === 'edit') {
                   onSelectPlotRef.current(menuState.plotIndex)
                 } else if (action === 'chat') {
@@ -181,6 +239,12 @@ export function Greenhouse({ plants, onSelectPlot, onStartChat, onLogout }: Gree
                   }
                 } else if (action === 'carry') {
                   handleCarryPlant(menuState.plotIndex)
+                } else if (action === 'share') {
+                  handleSharePlant(menuState.plotIndex)
+                } else if (action === 'unshare') {
+                  handleUnsharePlant(menuState.plotIndex)
+                } else if (action === 'copy-link') {
+                  handleCopyLink(menuState.plotIndex)
                 }
                 setMenuState(null)
               }}

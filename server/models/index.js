@@ -24,6 +24,11 @@ const plantSchema = new mongoose.Schema({
   lastCarriedAt: {
     type: Date,
     default: null
+  },
+  shareId: {
+    type: String,
+    sparse: true,
+    unique: true
   }
 })
 

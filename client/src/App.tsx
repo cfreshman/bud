@@ -7,10 +7,11 @@ import { LoginView } from './components/LoginView'
 import { PlantData } from './engine/types'
 import { serializePlantData, deserializePlantData } from './utils/plantSaveUtils'
 import { deleteMessagesForPlot } from './utils/chatStorage'
-import { isLoggedIn } from './services/auth'
+import { isLoggedIn, getToken } from './services/auth'
 import { loadPlants, savePlant, deletePlant } from './services/plants'
 import { LoadingScreen } from './components/LoadingScreen'
 import { MobileView } from './components/MobileView'
+import { API_URL } from './config'
 import './App.css'
 
 function App() {
@@ -34,6 +35,35 @@ function App() {
     }
     checkAuth()
   }, [])
+
+  // Check for shared plant link
+  useEffect(() => {
+    const checkSharedPlant = async () => {
+      const path = window.location.pathname
+      const match = path.match(/^\/shared\/([a-zA-Z0-9]+)$/)
+      if (match && isAuthenticated) {
+        try {
+          const shareId = match[1]
+          const response = await fetch(`${API_URL}/plants/shared/${shareId}`, {
+            headers: {
+              'Authorization': `Bearer ${getToken()}`
+            }
+          })
+          
+          if (response.ok) {
+            const { plotIndex, serializedPlant } = await response.json()
+            const plantData = deserializePlantData(serializedPlant)
+            setPlants(prev => new Map(prev).set(plotIndex, plantData))
+            // Remove share ID from URL without reloading
+            window.history.replaceState({}, '', '/')
+          }
+        } catch (error) {
+          console.error('Failed to load shared plant:', error)
+        }
+      }
+    }
+    checkSharedPlant()
+  }, [isAuthenticated])
 
   // Load plants from cloud when authenticated
   useEffect(() => {
@@ -257,6 +287,7 @@ function App() {
           onSelectPlot={handleSelectPlot}
           onStartChat={handleStartChat}
           onLogout={handleLogout}
+          onPlantsChange={setPlants}
         />
       )}
     </div>

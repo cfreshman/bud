@@ -2,12 +2,13 @@ import React from 'react'
 
 interface PlotMenuProps {
   position: { x: number, y: number }
-  onSelect: (action: 'chat' | 'edit' | 'carry') => void
+  onSelect: (action: 'chat' | 'edit' | 'carry' | 'share' | 'unshare' | 'copy-link') => void
   onClose: () => void
   isCarried?: boolean
+  shareId?: string
 }
 
-export function PlotMenu({ position, onSelect, onClose, isCarried = false }: PlotMenuProps) {
+export function PlotMenu({ position, onSelect, onClose, isCarried = false, shareId }: PlotMenuProps) {
   return (
     <>
       <div 
@@ -22,24 +23,51 @@ export function PlotMenu({ position, onSelect, onClose, isCarried = false }: Plo
           transform: 'translate(-50%, 8px)'
         }}
       >
-        <button
-          className="plot-menu-item"
-          onClick={() => onSelect('chat')}
-        >
-          chat
-        </button>
-        <button
-          className="plot-menu-item"
-          onClick={() => onSelect('edit')}
-        >
-          edit
-        </button>
-        <button
-          className="plot-menu-item"
-          onClick={() => onSelect('carry')}
-        >
-          {isCarried ? 'uncarry' : 'carry'}
-        </button>
+        {!shareId ? (
+          <>
+            <button
+              className="plot-menu-item"
+              onClick={() => onSelect('chat')}
+            >
+              chat
+            </button>
+            <button
+              className="plot-menu-item"
+              onClick={() => onSelect('edit')}
+            >
+              edit
+            </button>
+            <button
+              className="plot-menu-item"
+              onClick={() => onSelect('carry')}
+            >
+              {isCarried ? 'uncarry' : 'carry'}
+            </button>
+            {!isCarried && (
+              <button
+                className="plot-menu-item"
+                onClick={() => onSelect('share')}
+              >
+                share
+              </button>
+            )}
+          </>
+        ) : (
+          <>
+            <button
+              className="plot-menu-item"
+              onClick={() => onSelect('copy-link')}
+            >
+              copy link
+            </button>
+            <button
+              className="plot-menu-item"
+              onClick={() => onSelect('unshare')}
+            >
+              unshare
+            </button>
+          </>
+        )}
       </div>
     </>
   )
