@@ -147,6 +147,42 @@ export class BudEngine extends EngineUtils {
     )
     this.uiCamera.position.z = 1
 
+    // Create gradient background sphere
+    const skyGeometry = new THREE.SphereGeometry(50, 32, 32)
+    // Flip the sphere inside out so we see the inside
+    skyGeometry.scale(-1, 1, 1)
+    
+    // Create gradient material using a custom shader
+    const skyMaterial = new THREE.ShaderMaterial({
+      uniforms: {
+        topColor: { value: new THREE.Color('#442233') },  // Light blue-ish top
+        bottomColor: { value: new THREE.Color('#000000') }  // gold
+      },
+      vertexShader: `
+        varying vec3 vWorldPosition;
+        void main() {
+          vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+          vWorldPosition = worldPosition.xyz;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform vec3 topColor;
+        uniform vec3 bottomColor;
+        varying vec3 vWorldPosition;
+        void main() {
+          float h = normalize(vWorldPosition).y;
+          // Adjust the curve of the gradient using a power function
+          float t = pow(max(0.0, h * 0.5 + 0.5), 0.75);
+          gl_FragColor = vec4(mix(bottomColor, topColor, t), 1.0);
+        }
+      `,
+      side: THREE.FrontSide
+    })
+    
+    const sky = new THREE.Mesh(skyGeometry, skyMaterial)
+    this.scene.add(sky)
+    
     // Add grid helper
     const gridHelper = new THREE.GridHelper(10, 20, '#cccccc', '#888888')
     gridHelper.position.y = 0
