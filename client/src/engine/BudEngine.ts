@@ -2002,10 +2002,13 @@ export class BudEngine extends EngineUtils {
       return
     }
 
-    // Create position slightly in front of the main pot
+    // Create position on the front rim of the pot
     const potPosition = this.mainPot.position.clone()
-    const offset = new THREE.Vector3(0, -.5, 1.5) // Slightly above and in front
-    const newPosition = potPosition.clone().add(offset)
+    const potRadius = 0.6 // Matches the cylinder geometry radius from setupPotAndDirt
+    const rimHeight = potPosition.y + 0.4 // Pot height from setupPotAndDirt
+    const newPosition = potPosition.clone()
+    newPosition.z += potRadius // Move to front of pot
+    newPosition.y = rimHeight // Place at rim height
 
     // Clone the entire hierarchy
     const newPartId = this.clonePartHierarchy(boneId)
