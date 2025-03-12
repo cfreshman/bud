@@ -90,6 +90,13 @@ server {
         try_files \$uri \$uri/ /index.html;
     }
 
+    # Android APK download
+    location /android {
+        alias /var/www/$DOMAIN/client/dist/android;
+        add_header Content-Type application/vnd.android.package-archive;
+        add_header Content-Disposition attachment;
+    }
+
     # WebSocket endpoint
     location /ws {
         proxy_pass http://localhost:3001;

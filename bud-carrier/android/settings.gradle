@@ -21,7 +21,7 @@ extensions.configure(com.facebook.react.ReactSettingsExtension) { ex ->
   }
 }
 
-rootProject.name = 'bud-carrier'
+rootProject.name = 'bud carrier'
 
 dependencyResolutionManagement {
   versionCatalogs {

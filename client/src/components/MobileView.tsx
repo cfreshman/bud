@@ -19,18 +19,27 @@ export function MobileView() {
       <div className="mobile-content">
         <div className="message-bubble">
           <p>get the bud carrier app!</p>
-          <p>available on iOS TestFlight</p>
+          <p>available with iOS TestFlight and Android APK</p>
         </div>
-        <a 
-          href="https://testflight.apple.com/join/ChMubZNX"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="download-button"
-        >
-          bud 🌱 download
-        </a>
+        <div className="download-buttons">
+          <a 
+            href="https://testflight.apple.com/join/ChMubZNX"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="download-button"
+          >
+            bud 🌱 iOS
+          </a>
+          <a 
+            href="/android/bud.apk"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="download-button"
+          >
+            bud 🌱 Android
+          </a>
+        </div>
       </div>
-      
     </div>
   );
 } 

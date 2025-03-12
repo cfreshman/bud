@@ -832,6 +832,13 @@ button:focus-visible {
   margin-bottom: 0;
 }
 
+.download-buttons {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  margin-top: 20px;
+}
+
 .download-button {
   display: inline-block;
   padding: 8px 16px;
