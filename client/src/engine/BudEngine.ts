@@ -865,7 +865,12 @@ export class BudEngine extends EngineUtils {
         const toHit = new THREE.Vector3().subVectors(hitPoint, boneStart)
         const projectedDistance = toHit.dot(up)
         const ratio = projectedDistance / boneLength
-        const clampedRatio = Math.max(0, Math.min(1, ratio))
+        
+        // If ratio is very close to either end, snap to that end
+        const SNAP_THRESHOLD = 0.03 // 3% threshold for snapping to ends
+        const isStartAttachment = ratio <= SNAP_THRESHOLD
+        const isEndAttachment = ratio >= (1.0 - SNAP_THRESHOLD)
+        const clampedRatio = isStartAttachment ? 0.0 : isEndAttachment ? 1.0 : Math.max(0, Math.min(1, ratio))
         
         // Calculate attachment point on bone
         const attachPoint = boneStart.clone().add(up.clone().multiplyScalar(clampedRatio * boneLength))
@@ -888,7 +893,7 @@ export class BudEngine extends EngineUtils {
         // Calculate angle in local XZ plane
         const angle = Math.atan2(localToMouse.z, localToMouse.x)
         
-        console.log({ ratio, clampedRatio, degrees: angle * (180 / Math.PI) })
+        console.log({ ratio, isStartAttachment, isEndAttachment, clampedRatio, degrees: angle * (180 / Math.PI) })
         
         // Remove from old parent if exists
         if (part.parentBoneId) {
