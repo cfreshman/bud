@@ -1,7 +1,14 @@
 import { ExpoWebGLRenderingContext } from 'expo-gl';
 import { Renderer } from 'expo-three';
 import * as THREE from 'three';
+import * as SecureStore from 'expo-secure-store';
 import { PlantData, Body, Part, Bone, PartType, PartAttributes, Transform } from './types';
+
+interface CameraState {
+  targetRotation: { x: number, y: number };
+  cameraDistance: number;
+  cameraTarget: { x: number, y: number, z: number };
+}
 
 export class ViewEngine {
   protected scene: THREE.Scene;
@@ -30,6 +37,9 @@ export class ViewEngine {
   protected cameraTarget = new THREE.Vector3(0, 1, 0);
 
   protected hasBasicSetup: boolean = false;
+
+  // Add new properties
+  private saveStateTimeout: ReturnType<typeof setTimeout> | null = null;
 
   constructor(gl: ExpoWebGLRenderingContext) {
     console.log('ViewEngine constructor starting...');
@@ -77,6 +87,9 @@ export class ViewEngine {
       this.animate();
     }, 100);
 
+    // Load camera state
+    this.loadCameraState();
+
     console.log('ViewEngine constructor complete');
   }
 
@@ -101,25 +114,25 @@ export class ViewEngine {
   // Handle touch input for camera control
   public onTouchMove(dx: number, dy: number) {
     const sensitivity = 0.01;
-    // Horizontal rotation from 15° to 165° (through front at 90°)
-    // Negate dx to match physical swipe direction
     this.targetRotation.x = Math.max(Math.PI/12, Math.min(11*Math.PI/12, this.targetRotation.x - dx * sensitivity));
-    // Vertical angle from 0° to 45° from horizontal
     this.targetRotation.y = Math.max(0, Math.min(Math.PI/4, this.targetRotation.y + dy * sensitivity));
     this.updateCameraPosition();
     
-    // Force render after camera move
+    // Save state after update
+    this.saveCameraState();
+    
     this.renderer.render(this.scene, this.camera);
     this.gl.endFrameEXP();
   }
 
   // Handle pinch input for zoom
   public onPinch(scale: number) {
-    // Directly use scale to adjust camera distance
     this.cameraDistance = Math.max(2, Math.min(8, this.cameraDistance / scale));
     this.updateCameraPosition();
     
-    // Force render after camera move
+    // Save state after update
+    this.saveCameraState();
+    
     this.renderer.render(this.scene, this.camera);
     this.gl.endFrameEXP();
   }
@@ -660,6 +673,11 @@ export class ViewEngine {
       (this.gl as any).destroy();
     }
     
+    // Clear any pending save timeout
+    if (this.saveStateTimeout) {
+      clearTimeout(this.saveStateTimeout);
+    }
+    
     console.log('ViewEngine disposed');
   }
 
@@ -704,6 +722,47 @@ export class ViewEngine {
       this.gl.endFrameEXP();
     } catch (error) {
       console.error('Error in forceRender:', error);
+    }
+  }
+
+  private async saveCameraState() {
+    if (this.saveStateTimeout) {
+      clearTimeout(this.saveStateTimeout);
+    }
+
+    this.saveStateTimeout = setTimeout(async () => {
+      try {
+        const cameraState: CameraState = {
+          targetRotation: {
+            x: this.targetRotation.x,
+            y: this.targetRotation.y
+          },
+          cameraDistance: this.cameraDistance,
+          cameraTarget: {
+            x: this.cameraTarget.x,
+            y: this.cameraTarget.y,
+            z: this.cameraTarget.z
+          }
+        };
+        await SecureStore.setItemAsync('camera_state', JSON.stringify(cameraState));
+      } catch (error) {
+        console.error('Failed to save camera state:', error);
+      }
+    }, 500); // Debounce for 500ms
+  }
+
+  private async loadCameraState() {
+    try {
+      const savedState = await SecureStore.getItemAsync('camera_state');
+      if (savedState) {
+        const cameraState: CameraState = JSON.parse(savedState);
+        this.targetRotation.set(cameraState.targetRotation.x, cameraState.targetRotation.y);
+        this.cameraDistance = cameraState.cameraDistance;
+        this.cameraTarget.set(cameraState.cameraTarget.x, cameraState.cameraTarget.y, cameraState.cameraTarget.z);
+        this.updateCameraPosition();
+      }
+    } catch (error) {
+      console.error('Failed to load camera state:', error);
     }
   }
 } 
