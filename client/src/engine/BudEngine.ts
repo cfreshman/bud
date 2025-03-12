@@ -909,11 +909,24 @@ export class BudEngine extends EngineUtils {
           const projectedDistance = toHit.dot(up)
           const ratio = projectedDistance / boneLength
           
-          // If ratio is very close to either end, snap to that end
+          // Check if this is the first or last bone of the stem
+          const isFirstBone = parentPart.boneIds[0] === parentBone.id
+          const isLastBone = parentPart.boneIds[parentPart.boneIds.length - 1] === parentBone.id
+          
+          // Only snap if we're on the first or last bone of the stem
           const SNAP_THRESHOLD = 0.03 // 3% threshold for snapping to ends
-          const isStartAttachment = ratio <= SNAP_THRESHOLD
-          const isEndAttachment = ratio >= (1.0 - SNAP_THRESHOLD)
-          const clampedRatio = isStartAttachment ? 0.0 : isEndAttachment ? 1.0 : Math.max(0, Math.min(1, ratio))
+          let clampedRatio = ratio
+          
+          if (isFirstBone && ratio <= SNAP_THRESHOLD) {
+            // Snap to start of first bone
+            clampedRatio = 0
+          } else if (isLastBone && ratio >= (1.0 - SNAP_THRESHOLD)) {
+            // Snap to end of last bone
+            clampedRatio = 1
+          } else {
+            // For middle bones or non-snapping cases, just clamp to normal range
+            clampedRatio = Math.max(.01, Math.min(.99, ratio))
+          }
           
           // Calculate attachment point on bone
           const attachPoint = boneStart.clone().add(up.clone().multiplyScalar(clampedRatio * boneLength))
@@ -936,7 +949,7 @@ export class BudEngine extends EngineUtils {
           // Calculate angle in local XZ plane
           const angle = Math.atan2(localToMouse.z, localToMouse.x)
           
-          console.log({ ratio, isStartAttachment, isEndAttachment, clampedRatio, degrees: angle * (180 / Math.PI) })
+          console.log({ ratio, isStartAttachment: isFirstBone, isEndAttachment: isLastBone, clampedRatio, degrees: angle * (180 / Math.PI) })
           
           // Remove from old parent if exists
           if (part.parentBoneId) {
