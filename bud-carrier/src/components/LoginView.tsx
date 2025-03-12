@@ -62,6 +62,7 @@ export function LoginView({ onLogin }: LoginViewProps) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    width: '100%',
     backgroundColor: '#88aa99',
     alignItems: 'center',
     justifyContent: 'center',

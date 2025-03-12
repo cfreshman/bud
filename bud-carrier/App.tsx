@@ -19,6 +19,7 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [plant, setPlant] = useState<PlantData | undefined>();
   const [plotIndex, setPlotIndex] = useState<number | undefined>();
+  const [mountKey, setMountKey] = useState(0);
 
   // Load fonts
   useEffect(() => {
@@ -155,10 +156,20 @@ export default function App() {
   }, [isAuthenticated]);
 
   const handleLogout = async () => {
+    // First cleanup GL context
+    if (plant) {
+      setPlant(undefined);
+      setPlotIndex(undefined);
+      // Wait for state update
+      await new Promise(resolve => setTimeout(resolve, 0));
+    }
+    
+    // Then handle auth
     await removeToken();
     setIsAuthenticated(false);
-    setPlant(undefined);
-    setPlotIndex(undefined);
+    
+    // Force remount by updating key
+    setMountKey(prev => prev + 1);
   };
 
   // Show loading screen during initial setup or while loading plant data
@@ -174,23 +185,24 @@ export default function App() {
     );
   }
 
-  if (!isAuthenticated) {
-    return <LoginView onLogin={() => setIsAuthenticated(true)} />;
-  }
-
   return (
-    <SafeAreaProvider>
-      <View style={styles.container}>
-        {plant && plotIndex !== undefined ? (
-          <PlantView 
-            plant={plant} 
-            plotIndex={plotIndex} 
-            onLogout={handleLogout} 
-          />
-        ) : (
-          <NoPlantView onLogout={handleLogout} />
-        )}
-      </View>
+    <SafeAreaProvider key={mountKey} style={styles.container}>
+      {!isAuthenticated ? (
+        <LoginView onLogin={() => setIsAuthenticated(true)} />
+      ) : (
+        <View style={styles.container}>
+          {plant && plotIndex !== undefined ? (
+            <PlantView 
+              key={mountKey}
+              plant={plant} 
+              plotIndex={plotIndex} 
+              onLogout={handleLogout} 
+            />
+          ) : (
+            <NoPlantView onLogout={handleLogout} />
+          )}
+        </View>
+      )}
     </SafeAreaProvider>
   );
 }
@@ -206,6 +218,7 @@ function LoadingScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    width: '100%',
     backgroundColor: '#111419',
     alignItems: 'center',
     justifyContent: 'center',

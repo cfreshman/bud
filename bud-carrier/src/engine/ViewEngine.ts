@@ -638,9 +638,28 @@ export class ViewEngine {
       this.animationFrameId = null;
     }
     
+    // Clear scene and dispose resources
+    this.scene.traverse((child) => {
+      if (child instanceof THREE.Mesh) {
+        child.geometry?.dispose();
+        if (Array.isArray(child.material)) {
+          child.material.forEach(m => m.dispose());
+        } else {
+          child.material.dispose();
+        }
+      }
+    });
     this.scene.clear();
+    
+    // Dispose renderer
     this.renderer.dispose();
+    
+    // End frame and destroy context
     this.gl.endFrameEXP();
+    if ('destroy' in this.gl) {
+      (this.gl as any).destroy();
+    }
+    
     console.log('ViewEngine disposed');
   }
 
