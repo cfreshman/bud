@@ -85,7 +85,7 @@ export function PlantView({ plant, plotIndex = 0, onLogout }: PlantViewProps) {
             lastTouch1.y - lastTouch2.y
           );
           
-          // Calculate scale factor
+          // Use raw scale directly for consistent zoom speed
           const scale = currentDist / prevDist;
           engineRef.current?.onPinch(scale);
         }

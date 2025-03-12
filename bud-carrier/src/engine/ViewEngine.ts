@@ -115,9 +115,8 @@ export class ViewEngine {
 
   // Handle pinch input for zoom
   public onPinch(scale: number) {
-    const sensitivity = 0.05;
-    // Adjust zoom limits for better view
-    this.cameraDistance = Math.max(2, Math.min(8, this.cameraDistance * (1 + (1 - scale) * sensitivity)));
+    // Directly use scale to adjust camera distance
+    this.cameraDistance = Math.max(2, Math.min(8, this.cameraDistance / scale));
     this.updateCameraPosition();
     
     // Force render after camera move
