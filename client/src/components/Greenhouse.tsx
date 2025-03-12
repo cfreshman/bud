@@ -4,9 +4,10 @@ import { PlantData } from '../engine/types'
 import { deserializePlantData } from '../utils/plantSaveUtils'
 import { PlotMenu } from './PlotMenu'
 import { ChatView } from './ChatView'
-import { removeToken } from '../services/auth'
+import { removeToken, getToken } from '../services/auth'
 import { carryPlant, uncarryPlant, sharePlant, unsharePlant } from '../services/api'
 import { loadPlants } from '../services/plants'
+import { WS_URL } from '../config'
 
 interface GreenhouseProps {
   plants: Map<number, PlantData>
@@ -75,7 +76,25 @@ export function Greenhouse({ plants, onSelectPlot, onStartChat, onLogout, onPlan
   useEffect(() => {
     initializeEngine()
     
+    // Set up WebSocket connection
+    const token = getToken()
+    if (!token) return
+
+    const ws = new WebSocket(`${WS_URL}?token=${token}`)
+    
+    ws.onmessage = async (event) => {
+      const data = JSON.parse(event.data)
+      if (data.type === 'plant_web_update') {
+        const updatedPlants = await loadPlants()
+        if (onPlantsChange) {
+          onPlantsChange(updatedPlants)
+        }
+      }
+    }
+
     return () => {
+      ws.close()
+
       // Prevent double cleanup in React dev mode
       if (cleanupRef.current) return
       cleanupRef.current = true
@@ -90,7 +109,7 @@ export function Greenhouse({ plants, onSelectPlot, onStartChat, onLogout, onPlan
         engineRef.current = null
       }
     }
-  }, [initializeEngine])
+  }, [initializeEngine, onPlantsChange])
 
   // Reinitialize engine when returning from chat
   const handleChatClose = useCallback(() => {

@@ -7,14 +7,12 @@ const clients = new Map();
 function setupWebSocketServer(server) {
   const wss = new WebSocket.Server({ 
     server,
-    path: '/ws'  // Specify WebSocket endpoint path
+    path: '/ws'
   });
 
-  // Handle WebSocket connections
   wss.on('connection', (ws, req) => {
     let userId = null;
 
-    // Get token from URL params
     const url = new URL(req.url, `ws://${req.headers.host}`);
     const token = url.searchParams.get('token');
 
@@ -24,24 +22,18 @@ function setupWebSocketServer(server) {
     }
 
     try {
-      // Verify token and get user ID
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      userId = decoded.userId;
+      userId = decoded.userId.toString();
 
-      // Store connection
       if (!clients.has(userId)) {
         clients.set(userId, new Set());
       }
       clients.get(userId).add(ws);
-
-      console.log(`WebSocket client connected for user ${userId}`);
     } catch (error) {
-      console.error('Invalid token:', error);
       ws.close();
       return;
     }
 
-    // Handle client disconnect
     ws.on('close', () => {
       if (userId && clients.has(userId)) {
         clients.get(userId).delete(ws);
@@ -49,7 +41,6 @@ function setupWebSocketServer(server) {
           clients.delete(userId);
         }
       }
-      console.log(`WebSocket client disconnected for user ${userId}`);
     });
   });
 
@@ -57,8 +48,9 @@ function setupWebSocketServer(server) {
 }
 
 function notifyPlantCarryUpdate(userId) {
-  if (clients.has(userId)) {
-    const userClients = clients.get(userId);
+  const userIdStr = userId.toString();
+  if (clients.has(userIdStr)) {
+    const userClients = clients.get(userIdStr);
     const message = JSON.stringify({
       type: 'plant_carry_update'
     });
@@ -71,7 +63,24 @@ function notifyPlantCarryUpdate(userId) {
   }
 }
 
+function notifyWebClientUpdate(userId) {
+  const userIdStr = userId.toString();
+  if (clients.has(userIdStr)) {
+    const userClients = clients.get(userIdStr);
+    const message = JSON.stringify({
+      type: 'plant_web_update'
+    });
+    
+    userClients.forEach(client => {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(message);
+      }
+    });
+  }
+}
+
 module.exports = {
   setupWebSocketServer,
-  notifyPlantCarryUpdate
+  notifyPlantCarryUpdate,
+  notifyWebClientUpdate
 }; 

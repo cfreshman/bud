@@ -3,7 +3,7 @@ const router = express.Router()
 const auth = require('../middleware/auth')
 const { Plant, ChatHistory } = require('../models')
 const { generatePlantResponse } = require('../services/openai')
-const { notifyPlantCarryUpdate } = require('../services/websocket')
+const { notifyPlantCarryUpdate, notifyWebClientUpdate } = require('../services/websocket')
 
 // Get all plants for user
 router.get('/', auth, async (req, res) => {
@@ -371,9 +371,12 @@ router.get('/shared/:shareId', auth, async (req, res) => {
     })
     await newPlant.save()
 
-    // Delete the original plant from the owner's greenhouse
+    // Delete the original plant and chat history
     await Plant.deleteOne({ userId: plant.userId, plotIndex: plant.plotIndex })
     await ChatHistory.deleteOne({ userId: plant.userId, plotIndex: plant.plotIndex })
+
+    // Notify original owner
+    notifyWebClientUpdate(plant.userId)
 
     res.json({ 
       plotIndex: emptyPlotIndex,
