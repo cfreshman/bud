@@ -1,9 +1,10 @@
 const express = require('express')
 const router = express.Router()
 const auth = require('../middleware/auth')
-const { Plant, ChatHistory } = require('../models')
+const { Plant, ChatHistory, Memory } = require('../models')
 const { generatePlantResponse } = require('../services/openai')
 const { notifyPlantCarryUpdate, notifyWebClientUpdate } = require('../services/websocket')
+const { processChatResponse } = require('../services/memory')
 
 // Get all plants for user
 router.get('/', auth, async (req, res) => {
@@ -129,8 +130,11 @@ router.post('/:plotIndex/chat', auth, async (req, res) => {
       return res.status(400).json({ message: 'message is required' })
     }
 
-    // Get plant response
-    const response = await generatePlantResponse(req.user.userId, plotIndex, message, plantAttributes)
+    // Get plant response with actions
+    const actions = await generatePlantResponse(req.user.userId, plotIndex, message, plantAttributes)
+    
+    // Process actions and get final response
+    const response = await processChatResponse(req.user.userId, actions)
 
     res.json({ message: response })
   } catch (error) {
@@ -172,8 +176,17 @@ router.delete('/:plotIndex/chat', auth, async (req, res) => {
       return res.status(400).json({ message: 'invalid plot index' })
     }
 
+    // Delete chat history
     await ChatHistory.deleteOne({ userId: req.user.userId, plotIndex })
-    res.status(200).json({ message: 'chat history deleted' })
+
+    // Clear memories for this user
+    await Memory.findOneAndUpdate(
+      { userId: req.user.userId },
+      { $set: { memories: [] } },
+      { upsert: true }
+    )
+
+    res.status(200).json({ message: 'chat history and memories deleted' })
   } catch (error) {
     console.error('Failed to delete chat history:', error)
     res.status(500).json({ message: 'error deleting chat history' })

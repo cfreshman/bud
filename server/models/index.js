@@ -57,6 +57,21 @@ const chatHistorySchema = new mongoose.Schema({
   }]
 })
 
+// Memory schema - stores 50 memories per user
+const memorySchema = new mongoose.Schema({
+  userId: {
+    type: mongoose.Schema.Types.ObjectId,
+    required: true,
+    ref: 'User',
+    unique: true
+  },
+  memories: {
+    type: [String],
+    default: [],
+    validate: [arr => arr.length <= 50, 'Memory array cannot exceed 50 items']
+  }
+})
+
 // Compound indices
 plantSchema.index({ userId: 1, plotIndex: 1 }, { unique: true })
 chatHistorySchema.index({ userId: 1, plotIndex: 1 }, { unique: true })
@@ -64,8 +79,10 @@ chatHistorySchema.index({ userId: 1, plotIndex: 1 }, { unique: true })
 // Create models
 const Plant = mongoose.model('Plant', plantSchema)
 const ChatHistory = mongoose.model('ChatHistory', chatHistorySchema)
+const Memory = mongoose.model('Memory', memorySchema)
 
 module.exports = {
   Plant,
-  ChatHistory
+  ChatHistory,
+  Memory
 } 

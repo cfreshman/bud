@@ -49,7 +49,7 @@ export async function sendMessageToPlant(
     return data.message;
   } catch (error) {
     console.error('Error sending message to plant:', error);
-    return 'Sorry, I am having trouble responding right now.';
+    return 'Meep.';
   }
 }
 
