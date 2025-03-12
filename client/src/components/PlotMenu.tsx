@@ -6,9 +6,10 @@ interface PlotMenuProps {
   onClose: () => void
   isCarried?: boolean
   shareId?: string
+  isLinkCopied?: boolean
 }
 
-export function PlotMenu({ position, onSelect, onClose, isCarried = false, shareId }: PlotMenuProps) {
+export function PlotMenu({ position, onSelect, onClose, isCarried = false, shareId, isLinkCopied }: PlotMenuProps) {
   return (
     <>
       <div 
@@ -23,7 +24,15 @@ export function PlotMenu({ position, onSelect, onClose, isCarried = false, share
           transform: 'translate(-50%, 8px)'
         }}
       >
-        {!shareId ? (
+        {isLinkCopied ? (
+          <button
+            className="plot-menu-item"
+            style={{ opacity: 0.6, cursor: 'default' }}
+            onClick={(e) => e.preventDefault()}
+          >
+            link copied
+          </button>
+        ) : !shareId ? (
           <>
             <button
               className="plot-menu-item"

@@ -21,7 +21,7 @@ export function Greenhouse({ plants, onSelectPlot, onStartChat, onLogout, onPlan
   const containerRef = useRef<HTMLDivElement>(null)
   const engineRef = useRef<ViewEngine | null>(null)
   const cleanupRef = useRef(false)
-  const [menuState, setMenuState] = useState<{ position: { x: number, y: number }, plotIndex: number } | null>(null)
+  const [menuState, setMenuState] = useState<{ position: { x: number, y: number }, plotIndex: number, isLinkCopied?: boolean } | null>(null)
   const [chatState, setChatState] = useState<{ plant: PlantData } | null>(null)
   const [carriedPlotIndex, setCarriedPlotIndex] = useState<number | null>(null)
   
@@ -150,27 +150,33 @@ export function Greenhouse({ plants, onSelectPlot, onStartChat, onLogout, onPlan
   }, [carriedPlotIndex])
 
   const handleSharePlant = async (plotIndex: number) => {
-    console.log('handleSharePlant called:', { plotIndex })
     try {
       const plant = plants.get(plotIndex)
-      if (!plant) {
-        console.log('No plant found for plot:', plotIndex)
-        return
-      }
+      if (!plant) return
 
-      console.log('Calling sharePlant API...')
       await sharePlant(plotIndex.toString())
       
-      console.log('Loading updated plants...')
       const updatedPlants = await loadPlants()
-      console.log('Updated plants:', {
-        count: updatedPlants.size,
-        plots: Array.from(updatedPlants.keys()),
-        shared: Array.from(updatedPlants.values()).filter(p => p.shareId).length
-      })
       
+      // Get the updated plant with shareId
+      const updatedPlant = updatedPlants.get(plotIndex)
+      if (!updatedPlant?.shareId) return
+      
+      // Copy link to clipboard
+      const shareUrl = `${window.location.origin}/shared/${updatedPlant.shareId}`
+      await navigator.clipboard.writeText(shareUrl)
+      
+      // Show "link copied" state
+      if (menuState) {
+        setMenuState({ ...menuState, isLinkCopied: true })
+        
+        // Close menu after delay
+        setTimeout(() => {
+          setMenuState(null)
+        }, 1500)
+      }
+
       if (onPlantsChange) {
-        console.log('Calling onPlantsChange...')
         onPlantsChange(updatedPlants)
       }
     } catch (error) {
@@ -243,8 +249,8 @@ export function Greenhouse({ plants, onSelectPlot, onStartChat, onLogout, onPlan
               position={menuState.position}
               isCarried={carriedPlotIndex === menuState.plotIndex}
               shareId={plants.get(menuState.plotIndex)?.shareId}
+              isLinkCopied={menuState.isLinkCopied}
               onSelect={(action) => {
-                console.log('Plot menu action selected:', { action, plotIndex: menuState.plotIndex })
                 if (action === 'edit') {
                   onSelectPlotRef.current(menuState.plotIndex)
                 } else if (action === 'chat') {
@@ -265,9 +271,15 @@ export function Greenhouse({ plants, onSelectPlot, onStartChat, onLogout, onPlan
                 } else if (action === 'copy-link') {
                   handleCopyLink(menuState.plotIndex)
                 }
-                setMenuState(null)
+                if (!menuState.isLinkCopied) {
+                  setMenuState(null)
+                }
               }}
-              onClose={() => setMenuState(null)}
+              onClose={() => {
+                if (!menuState.isLinkCopied) {
+                  setMenuState(null)
+                }
+              }}
             />
           )}
         </div>
