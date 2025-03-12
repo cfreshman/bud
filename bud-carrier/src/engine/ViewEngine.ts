@@ -247,7 +247,7 @@ export class ViewEngine {
       
       this.scene.add(directionalLight);
       
-      const fillLight = new THREE.DirectionalLight(0xffffff, 0.5);
+      const fillLight = new THREE.DirectionalLight(0xffffff, 0.25);
       fillLight.position.set(-2, 2, -2);
       this.scene.add(fillLight);
       
