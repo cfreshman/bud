@@ -894,8 +894,11 @@ button:focus-visible {
   margin-bottom: 8px;
 }
 
-.mobile-message p:last-of-type {
+.mobile-message p:not(:first-child) {
   font-size: 12px;
   opacity: 0.6;
+  margin-bottom: 0;
+}
+.mobile-message p:last-child {
   margin-bottom: 0;
 }

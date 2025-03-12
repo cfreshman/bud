@@ -23,6 +23,7 @@ function App() {
   const [isAuthChecking, setIsAuthChecking] = useState(true)
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [activeEditingPlant, setActiveEditingPlant] = useState<PlantData | undefined>()
+  const [sharedBudClaimed, setSharedBudClaimed] = useState(false)
   const viewEngineRef = useRef<ViewEngine | null>(null)
   const [isMobile, setIsMobile] = useState(false)
 
@@ -56,6 +57,8 @@ function App() {
             setPlants(prev => new Map(prev).set(plotIndex, plantData))
             // Remove share ID from URL without reloading
             window.history.replaceState({}, '', '/')
+            // Set shared bud claimed flag
+            setSharedBudClaimed(true)
           }
         } catch (error) {
           console.error('Failed to load shared plant:', error)
@@ -258,7 +261,13 @@ function App() {
   }
 
   if (isMobile) {
-    return <MobileView />;
+    if (isAuthChecking || isLoading) {
+      return <LoadingScreen />;
+    }
+    if (!isAuthenticated) {
+      return <LoginView onLogin={() => setIsAuthenticated(true)} />;
+    }
+    return <MobileView sharedBudClaimed={sharedBudClaimed} />;
   }
 
   return (

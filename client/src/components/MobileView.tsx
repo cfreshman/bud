@@ -1,6 +1,10 @@
 import React from 'react';
 
-export function MobileView() {
+interface MobileViewProps {
+  sharedBudClaimed?: boolean;
+}
+
+export function MobileView({ sharedBudClaimed }: MobileViewProps) {
   return (
     <div className="mobile-view">
       <svg 
@@ -17,6 +21,11 @@ export function MobileView() {
       </svg>
 
       <div className="mobile-content" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+        {sharedBudClaimed && (
+          <div className="mobile-message">
+            <p>you claimed a bud!</p>
+          </div>
+        )}
         <div className="mobile-message">
           <p>get the bud carrier app!</p>
           <p>available with iOS TestFlight and Android APK</p>
