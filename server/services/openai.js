@@ -21,6 +21,8 @@ async function generatePlantResponse(userId, plotIndex, message, plantAttributes
     const chatHistory = await getChatHistory(userId, plotIndex);
     const memories = await getUserMemories(userId);
 
+    // console.log('memories', memories);
+
     // Generate base personality from attributes
     const personality = generatePersonalityFromParts(plantAttributes);
 
@@ -49,7 +51,9 @@ ${memories.map((m, i) => `${i}: ${m}`).join('\n')}
 Remember:
 1. Return exactly one chat action in the 'actions' response array
 2. You can return multiple remember/forget actions
-3. Memory indices must be valid (0-${memories.length - 1})`;
+3. Memory indices must be valid (0-${memories.length - 1})
+4. DON'T KEEP REPEAT MEMORIES. You can alter a memory by forgetting and remembering a new version. You can add importance, e.g. IMPORTANT: <memory>
+`;
 
     // Get completion from OpenAI
     const completion = await openai.chat.completions.create({

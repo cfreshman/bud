@@ -29,6 +29,23 @@ export function Greenhouse({ plants, onSelectPlot, onStartChat, onLogout, onPlan
   const onSelectPlotRef = useRef(onSelectPlot)
   onSelectPlotRef.current = onSelectPlot
 
+  // Add focus event listener to reload plants
+  useEffect(() => {
+    const handleFocus = async () => {
+      try {
+        const updatedPlants = await loadPlants()
+        if (onPlantsChange) {
+          onPlantsChange(updatedPlants)
+        }
+      } catch (error) {
+        console.error('Failed to reload plants on focus:', error)
+      }
+    }
+
+    window.addEventListener('focus', handleFocus)
+    return () => window.removeEventListener('focus', handleFocus)
+  }, [onPlantsChange])
+
   // Create click handler with access to current plants
   const handlePlotClick = useCallback((plotIndex: number | null) => {
     // If clicking outside plots, just close the menu
