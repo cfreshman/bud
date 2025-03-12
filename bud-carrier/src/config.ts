@@ -1,10 +1,17 @@
 import Constants from 'expo-constants';
+import { Platform } from 'react-native';
 
 // Network configuration
 const ENV = {
   development: {
-    apiUrl: 'http://localhost:3001/api',
-    wsUrl: 'ws://localhost:3001/ws',
+    apiUrl: Platform.select({
+      android: 'http://10.0.2.2:3001/api',
+      default: 'http://localhost:3001/api'
+    }),
+    wsUrl: Platform.select({
+      android: 'ws://10.0.2.2:3001/ws',
+      default: 'ws://localhost:3001/ws'
+    }),
   },
   production: {
     apiUrl: 'https://bud-ga.me/api',
