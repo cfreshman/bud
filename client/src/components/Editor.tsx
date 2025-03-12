@@ -146,10 +146,14 @@ export function Editor({ plantData, plotIndex, onSave, onCancel, onDelete }: Edi
   // Handle final save
   const handleSave = () => {
     if (!engineRef.current || engineRef.current.isDisposed()) return
-    const plantData = engineRef.current.getPlantData()
+    const newPlantData = engineRef.current.getPlantData()
+    // Preserve the carried state from the original plant data
+    if (newPlantData) {
+      newPlantData.isCarried = plantData?.isCarried || false
+    }
     // Clear editor state before saving to greenhouse
     localStorage.removeItem('editor_plant_state')
-    onSave(plantData)
+    onSave(newPlantData)
   }
 
   // Handle cancel

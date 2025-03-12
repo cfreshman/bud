@@ -213,10 +213,10 @@ export class ViewEngine {
 
     if (!this.hasBasicSetup) {
       // Add lights with better intensity
-      const ambientLight = new THREE.AmbientLight(0xffffff, 2.2);
+      const ambientLight = new THREE.AmbientLight(0xffffff, 1);
       this.scene.add(ambientLight);
       
-      const directionalLight = new THREE.DirectionalLight(0xffffff, 2.2);
+      const directionalLight = new THREE.DirectionalLight(0xffffff, 1.5);
       directionalLight.position.set(2, 4, 2);
       directionalLight.castShadow = true;
       

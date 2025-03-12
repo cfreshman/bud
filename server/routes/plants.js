@@ -35,7 +35,7 @@ router.put('/:plotIndex', auth, async (req, res) => {
       return res.status(400).json({ message: 'invalid plot index' })
     }
 
-    await Plant.findOneAndUpdate(
+    const plant = await Plant.findOneAndUpdate(
       { userId: req.user.userId, plotIndex },
       { 
         userId: req.user.userId,
@@ -45,6 +45,11 @@ router.put('/:plotIndex', auth, async (req, res) => {
       },
       { upsert: true, new: true }
     )
+
+    // Notify clients if this plant is carried
+    if (plant.isCarried) {
+      notifyPlantCarryUpdate(req.user.userId)
+    }
 
     res.status(200).json({ message: 'plant saved' })
   } catch (error) {
