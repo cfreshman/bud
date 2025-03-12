@@ -16,8 +16,8 @@ export function MobileView() {
         />
       </svg>
 
-      <div className="mobile-content">
-        <div className="message-bubble">
+      <div className="mobile-content" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+        <div className="mobile-message">
           <p>get the bud carrier app!</p>
           <p>available with iOS TestFlight and Android APK</p>
         </div>
@@ -38,6 +38,10 @@ export function MobileView() {
           >
             bud 🌱 Android
           </a>
+        </div>
+        <div className="mobile-message">
+          <p>looking to manage your buds?</p>
+          <p>open this page on desktop!</p>
         </div>
       </div>
     </div>

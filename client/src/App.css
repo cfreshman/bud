@@ -816,6 +816,10 @@ button:focus-visible {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
+.message-bubble + .message-bubble {
+  margin-top: 24px;
+}
+
 .message-bubble h1 {
   font-size: 4rem;
   margin-bottom: 1rem;
@@ -836,7 +840,6 @@ button:focus-visible {
   display: flex;
   gap: 12px;
   justify-content: center;
-  margin-top: 20px;
 }
 
 .download-button {
@@ -877,4 +880,22 @@ button:focus-visible {
   padding: 0;
   cursor: pointer;
   flex-shrink: 0;
+}
+
+.mobile-message {
+  background-color: #ffffff;
+  padding: 16px;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.mobile-message p {
+  font-size: 14px;
+  margin-bottom: 8px;
+}
+
+.mobile-message p:last-of-type {
+  font-size: 12px;
+  opacity: 0.6;
+  margin-bottom: 0;
 }
