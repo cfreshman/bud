@@ -334,9 +334,6 @@ export class BudEngine extends EngineUtils {
     this.mouseDown = true
     this.isDragging = false
 
-    // unselect any selected part
-    this.activePartId = undefined
-
     this.mouse.x = (event.clientX / this.renderer.domElement.clientWidth) * 2 - 1
     this.mouse.y = -(event.clientY / this.renderer.domElement.clientHeight) * 2 + 1
     
@@ -394,6 +391,13 @@ export class BudEngine extends EngineUtils {
           width: 0.05
         })
 
+        // Set selection state immediately
+        this.activePartId = id
+        const part = this.parts.get(id)
+        if (part && part.boneIds.length > 0) {
+          this.selectedBoneId = part.boneIds[0]
+        }
+
         // Find the newly created part's group and set it as the outline target
         const partGroup = this.scene.children.find(child => 
           child instanceof THREE.Group && child.userData.partId === id
@@ -404,7 +408,6 @@ export class BudEngine extends EngineUtils {
         }
 
         // Get the bone ID from the part
-        const part = this.parts.get(id)
         if (!part || part.boneIds.length === 0) return
         const boneId = part.boneIds[0]
 
@@ -455,7 +458,8 @@ export class BudEngine extends EngineUtils {
       }
     }
     
-    // If we get here, we clicked outside any selectable object
+    // Only unselect if we clicked outside any selectable object
+    this.activePartId = undefined
     this.selectedBoneId = undefined
     this.outlinePass.selectedObjects = []
     this.composer.render()
@@ -536,12 +540,6 @@ export class BudEngine extends EngineUtils {
         if (previewMesh) {
           previewMesh.visible = true
         }
-      }
-      
-      // If we were dragging a new part, clear the outline
-      if (this.selectedPartType) {
-        this.outlinePass.selectedObjects = []
-        this.composer.render()
       }
       
       this.endBoneDrag()
@@ -872,7 +870,7 @@ export class BudEngine extends EngineUtils {
         // Calculate attachment point on bone
         const attachPoint = boneStart.clone().add(up.clone().multiplyScalar(clampedRatio * boneLength))
         
- // Calculate vector from attachment point to mouse in bone's local space
+        // Calculate vector from attachment point to mouse in bone's local space
         const toMouse = new THREE.Vector3().subVectors(worldPosition, attachPoint)
         
         // Create inverse rotation matrix to transform toMouse into bone's local space
@@ -1250,10 +1248,21 @@ export class BudEngine extends EngineUtils {
       worldPosition: adjustedPosition,
       isHead: isFirstStem // Only set isHead true for the first stem
     })
-    this.activePartId = partId
     
-    // Render the body to create the group and meshes
-    const body = Array.from(this.bodies.values()).find(b => b.rootPartId === partId)
+    // Create body and set its position
+    const body = this.createBodyForPart(partId)
+    if (body) {
+      body.transform.position.copy(adjustedPosition)
+    }
+
+    // Set selection state
+    this.activePartId = partId
+    const part = this.parts.get(partId)
+    if (part && part.boneIds.length > 0) {
+      this.selectedBoneId = part.boneIds[0]
+    }
+    
+    // Force render to create the mesh
     if (body) {
       this.renderBody(body.id)
     }
