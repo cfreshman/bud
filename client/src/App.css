@@ -850,3 +850,31 @@ button:focus-visible {
   cursor: pointer;
   transition: all 0.2s;
 }
+
+.color-history {
+  display: flex;
+  gap: 4px;
+  margin: 8px 0;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  scrollbar-width: none;  /* Firefox */
+  -ms-overflow-style: none;  /* IE and Edge */
+  
+  /* expand to 100% without affecting it */
+  width: 0;
+  min-width: 100%;
+}
+
+.color-history::-webkit-scrollbar {
+  display: none;  /* Chrome, Safari and Opera */
+}
+
+.color-history button {
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: 2px;
+  padding: 0;
+  cursor: pointer;
+  flex-shrink: 0;
+}

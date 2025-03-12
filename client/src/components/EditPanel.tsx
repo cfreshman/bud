@@ -1,4 +1,8 @@
 import { EditableProperties } from '../types'
+import { useState, useEffect, useRef } from 'react'
+import { ColorHistory } from './ColorHistory'
+
+const COLOR_HISTORY_KEY = 'bud_color_history'
 
 type EditPanelProps = {
   selected: EditableProperties | null
@@ -21,7 +25,35 @@ export function EditPanel({
   onFitView,
   onApplyToAll
 }: EditPanelProps) {
+  const lastColorRef = useRef(selected?.color)
+  const [colorHistory, setColorHistory] = useState<string[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem(COLOR_HISTORY_KEY) || '[]')
+    } catch {
+      return []
+    }
+  })
+
+  useEffect(() => {
+    localStorage.setItem(COLOR_HISTORY_KEY, JSON.stringify(colorHistory))
+  }, [colorHistory])
+
+  useEffect(() => {
+    if (lastColorRef.current && lastColorRef.current !== 'none') {
+      setColorHistory(prev => {
+        const newHistory = prev.filter(c => c !== lastColorRef.current)
+        return [...newHistory, lastColorRef.current!].slice(-20)
+      })
+    }
+    lastColorRef.current = selected?.color
+  }, [selected?.id])
+
   if (!selected) return null
+
+  const handleColorChange = (color: string) => {
+    onUpdateProperties(selected.id, { color })
+    lastColorRef.current = color
+  }
 
   return (
     <div className="edit-panel">
@@ -30,24 +62,32 @@ export function EditPanel({
         <input 
           type="color" 
           value={selected.color}
-          onChange={(e) => {
-            onUpdateProperties(selected.id, { color: e.target.value })
-          }}
+          onInput={(e: any) => handleColorChange(e.target.value)}
+          onChange={(e: any) => handleColorChange(e.target.value)}
         />
         <button 
-          onClick={() => onUpdateProperties(selected.id, { color: selected.type === 'stem' ? '#44aa44' : 
-            selected.type === 'leaf' ? '#66cc66' : 
-            selected.type === 'thorn' ? '#aa4444' : 
-            '#ffdd88' })}
+          onClick={() => {
+            const defaultColor = selected.type === 'stem' ? '#44aa44' : 
+              selected.type === 'leaf' ? '#66cc66' : 
+              selected.type === 'thorn' ? '#aa4444' : 
+              '#ffdd88'
+            handleColorChange(defaultColor)
+          }}
         >
           default
         </button>
         <button 
-          onClick={() => onUpdateProperties(selected.id, { color: 'none' })}
+          onClick={() => handleColorChange('none')}
         >
           inherit
         </button>
       </div>
+
+      <ColorHistory
+        colors={colorHistory}
+        currentColor={selected.color}
+        onSelectColor={handleColorChange}
+      />
 
       <div className="edit-row">
         <span>length</span>
