@@ -282,7 +282,7 @@ export function Greenhouse({
         </button>
         <div className="chat-button" style={{ cursor: 'default', border: '1px solid transparent', backgroundClip: 'padding-box' }}>
           <Star weight="fill" style={{ marginRight: '4px' }} />
-          {stars.currentStars}/{stars.totalStars}
+          {stars.currentStars}
         </div>
         {receivedPlot !== null && (
           <button 
