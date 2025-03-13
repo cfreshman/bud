@@ -41,6 +41,7 @@ async function processChatResponse(userId, actions) {
     toAdd: [],
     toRemove: new Set()
   };
+  let hasAwardedStar = false;
 
   // First pass - collect all actions
   for (const action of actions) {
@@ -64,6 +65,7 @@ async function processChatResponse(userId, actions) {
             currentStars: 1
           }
         });
+        hasAwardedStar = true;
         break;
     }
   }
@@ -90,6 +92,11 @@ async function processChatResponse(userId, actions) {
 
     // Save all changes in one operation
     await memory.save();
+  }
+
+  // Append star to chat message if we were awarded one
+  if (hasAwardedStar && !chatMessage.includes('⭐️')) {
+    chatMessage += ' ⭐️';
   }
 
   return chatMessage || 'Meep.';
