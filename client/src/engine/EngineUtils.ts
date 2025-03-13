@@ -87,7 +87,7 @@ export class EngineUtils {
     this.controls.screenSpacePanning = true
     this.controls.minDistance = 1
     this.controls.maxDistance = 10
-    this.controls.maxPolarAngle = Math.PI / 2
+    this.controls.maxPolarAngle = Math.PI / 2 * .99
     this.controls.target.set(0, 0.4, 0)
     this.controls.update()
 
