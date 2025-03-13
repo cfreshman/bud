@@ -73,11 +73,8 @@ function App() {
           }
 
           // Add the shared plant to state
-          const plant = JSON.parse(data.serializedPlant)
-          setPlants(prev => ({
-            ...prev,
-            [data.plotIndex]: plant
-          }))
+          const plantData = deserializePlantData(data.serializedPlant)
+          setPlants(prev => new Map(prev).set(data.plotIndex, plantData))
           setSharedBudClaimed(true)
 
           // Remove share ID from URL
@@ -227,9 +224,7 @@ function App() {
       await savePlant(selectedPlot, plantData)
       
       // Update local state
-      const newPlants = new Map(plants)
-      newPlants.set(selectedPlot, plantData)
-      setPlants(newPlants)
+      setPlants(prev => new Map(prev).set(selectedPlot, plantData))
       
       // Clear editing state
       setSelectedPlot(null)
