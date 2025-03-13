@@ -13,6 +13,7 @@ export class ViewEngine extends EngineUtils {
   private boundMouseDown: (event: MouseEvent) => void = () => {}
   private boundMouseMove: (event: MouseEvent) => void = () => {}
   private boundMouseUp: () => void = () => {}
+  private receivedPlotIndex: number | null = null
 
   constructor(container: HTMLElement, onSelectPlot: (plotIndex: number | null) => void) {
     super(container)
@@ -178,6 +179,22 @@ export class ViewEngine extends EngineUtils {
   }
 
   // Methods for managing plants in plots
+  setReceivedPlot(plotIndex: number | null) {
+    this.receivedPlotIndex = plotIndex
+    
+    // Update pot color
+    if (plotIndex !== null) {
+      const plot = this.plots[plotIndex]
+      if (plot) {
+        const potMesh = plot.children.find((child: THREE.Object3D) => child instanceof THREE.Mesh) as THREE.Mesh
+        if (potMesh && potMesh.material instanceof THREE.MeshStandardMaterial) {
+          potMesh.material.color.setHex(0x44cc77) // Saturated green color
+          potMesh.material.opacity = 0.8
+        }
+      }
+    }
+  }
+
   setPlantInPlot(plotIndex: number, plantData: PlantData | undefined) {
     if (plantData) {
       // Get plot position
@@ -203,6 +220,9 @@ export class ViewEngine extends EngineUtils {
           potMesh.material.opacity = 0.8
         } else if (plantData.isCarried) {
           potMesh.material.color.setHex(0xFFD700) // Gold for carried
+          potMesh.material.opacity = 0.8
+        } else if (plotIndex === this.receivedPlotIndex) {
+          potMesh.material.color.setHex(0x44cc77) // Saturated green for received
           potMesh.material.opacity = 0.8
         } else {
           potMesh.material.color.setHex(0x8B5E3C) // Default brown
@@ -236,6 +256,9 @@ export class ViewEngine extends EngineUtils {
         const plantData = this.activePlots.get(index)
         if (plantData?.shareId) {
           potMesh.material.color.setHex(0x4477ff) // Keep blue for shared
+          potMesh.material.opacity = 0.8
+        } else if (index === this.receivedPlotIndex) {
+          potMesh.material.color.setHex(0x44cc77) // Keep saturated green for received
           potMesh.material.opacity = 0.8
         } else {
           potMesh.material.color.setHex(0x8B5E3C) // Default brown

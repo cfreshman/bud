@@ -15,9 +15,17 @@ interface GreenhouseProps {
   onStartChat: (plotIndex: number) => void
   onLogout: () => void
   onPlantsChange?: (plants: Map<number, PlantData>) => void
+  receivedPlot: number | null
 }
 
-export function Greenhouse({ plants, onSelectPlot, onStartChat, onLogout, onPlantsChange }: GreenhouseProps) {
+export function Greenhouse({ 
+  plants, 
+  onSelectPlot, 
+  onStartChat, 
+  onLogout, 
+  onPlantsChange,
+  receivedPlot 
+}: GreenhouseProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const engineRef = useRef<ViewEngine | null>(null)
   const cleanupRef = useRef(false)
@@ -86,8 +94,12 @@ export function Greenhouse({ plants, onSelectPlot, onStartChat, onLogout, onPlan
         setCarriedPlotIndex(plotIndex)
         engineRef.current?.setCarriedPlot(plotIndex)
       }
+      // Set received plant visual
+      if (plotIndex === receivedPlot) {
+        engineRef.current?.setReceivedPlot(plotIndex)
+      }
     })
-  }, [handlePlotClick, plants])
+  }, [handlePlotClick, plants, receivedPlot])
 
   // Initialize engine on mount
   useEffect(() => {
@@ -239,18 +251,31 @@ export function Greenhouse({ plants, onSelectPlot, onStartChat, onLogout, onPlan
 
   return (
     <>
-      <button 
-        className="chat-button"
-        onClick={onLogout}
-        style={{
-          position: 'fixed',
-          top: '20px',
-          left: '20px',
-          zIndex: 1000
-        }}
-      >
-        logout
-      </button>
+      <div style={{ 
+        position: 'fixed', 
+        top: '20px', 
+        left: '20px', 
+        zIndex: 1000,
+        display: 'flex',
+        gap: '12px'
+      }}>
+        <button className="chat-button" onClick={onLogout}>
+          logout
+        </button>
+        {receivedPlot !== null && (
+          <button 
+            className="chat-button" 
+            onClick={() => onStartChat(receivedPlot)}
+            style={{ 
+              background: '#fdfdfd',
+              color: '#000000',
+              border: '1px solid #000000'
+            }}
+          >
+            you received a plant!
+          </button>
+        )}
+      </div>
       <div style={{ position: 'relative', width: '100%', height: '100%' }}>
         <div 
           ref={containerRef} 

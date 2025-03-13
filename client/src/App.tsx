@@ -27,6 +27,7 @@ function App() {
   const viewEngineRef = useRef<ViewEngine | null>(null)
   const [isMobile, setIsMobile] = useState(false)
   const [username, setUsername] = useState('')
+  const [receivedPlot, setReceivedPlot] = useState<number | null>(null)
 
   // Check auth state on mount
   useEffect(() => {
@@ -46,7 +47,17 @@ function App() {
     checkAuth()
   }, [])
 
-  // Check for shared plant in URL
+  // Clear received plant notification after 1 minute
+  useEffect(() => {
+    if (receivedPlot !== null) {
+      const timeout = setTimeout(() => {
+        setReceivedPlot(null)
+      }, 60000) // 1 minute
+      return () => clearTimeout(timeout)
+    }
+  }, [receivedPlot])
+
+  // Update shared plant handling to set receivedPlot
   useEffect(() => {
     const checkSharedPlant = async () => {
       const path = window.location.pathname
@@ -75,7 +86,11 @@ function App() {
           // Add the shared plant to state
           const plantData = deserializePlantData(data.serializedPlant)
           setPlants(prev => new Map(prev).set(data.plotIndex, plantData))
-          setSharedBudClaimed(true)
+          if (!isMobile) {
+            setReceivedPlot(data.plotIndex)
+          } else {
+            setSharedBudClaimed(true)
+          }
 
           // Remove share ID from URL
           window.history.replaceState({}, '', '/')
@@ -85,7 +100,7 @@ function App() {
       }
     }
     checkSharedPlant()
-  }, [isAuthenticated])
+  }, [isAuthenticated, isMobile])
 
   // Load plants from cloud when authenticated
   useEffect(() => {
@@ -182,6 +197,9 @@ function App() {
   }, []);
 
   const handleSelectPlot = (plotIndex: number) => {
+    if (plotIndex === receivedPlot) {
+      setReceivedPlot(null)
+    }
     // Get plant data from plants Map
     const plantData = plants.get(plotIndex)
     
@@ -198,6 +216,9 @@ function App() {
   }
   
   const handleStartChat = (plotIndex: number) => {
+    if (plotIndex === receivedPlot) {
+      setReceivedPlot(null)
+    }
     console.log('Starting chat for plot:', plotIndex)
     if (!plants.has(plotIndex)) {
       console.log('No plant found for plot:', plotIndex)
@@ -325,6 +346,7 @@ function App() {
           onStartChat={handleStartChat}
           onLogout={handleLogout}
           onPlantsChange={setPlants}
+          receivedPlot={receivedPlot}
         />
       )}
     </div>
