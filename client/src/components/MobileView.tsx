@@ -9,20 +9,20 @@ interface MobileViewProps {
 export function MobileView({ sharedBudClaimed, onLogout, username }: MobileViewProps) {
   return (
     <div className="mobile-view">
-      <svg 
-        className="backsplash-scene" 
-        viewBox="0 0 100 100" 
-        preserveAspectRatio="xMidYMid slice"
-      >
-        <circle 
-          cx="50" 
-          cy="225" 
-          r="150" 
-          fill="#bbddbb" 
-        />
-      </svg>
+      <div className="circle" />
 
       <div className="mobile-content" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+        {sharedBudClaimed && (
+          <div className="mobile-message">
+            <p>you claimed a bud!</p>
+          </div>
+        )}
+
+        <div className="mobile-message">
+          <p>looking to manage your buds?</p>
+          <p>open this page on desktop!</p>
+          <p>while bud share links work on mobile, you can't manage your buds. that requires a mouse!</p>
+        </div>
         <div className="download-buttons">
           <button 
             className="download-button"
@@ -32,11 +32,6 @@ export function MobileView({ sharedBudClaimed, onLogout, username }: MobileViewP
           </button>
         </div>
 
-        {sharedBudClaimed && (
-          <div className="mobile-message">
-            <p>you claimed a bud!</p>
-          </div>
-        )}
         <div className="mobile-message">
           <p>get the bud carrier app!</p>
           <p>available with iOS TestFlight and Android APK</p>
@@ -58,10 +53,6 @@ export function MobileView({ sharedBudClaimed, onLogout, username }: MobileViewP
           >
             bud 🌱 Android
           </a>
-        </div>
-        <div className="mobile-message">
-          <p>looking to manage your buds?</p>
-          <p>open this page on desktop!</p>
         </div>
       </div>
     </div>
