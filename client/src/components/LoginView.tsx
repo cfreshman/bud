@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { login, register, setToken } from '../services/auth'
 
 interface LoginViewProps {
@@ -11,6 +11,11 @@ export function LoginView({ onLogin }: LoginViewProps) {
   const [password, setPassword] = useState('')
   const [isRegistering, setIsRegistering] = useState(false)
   const [error, setError] = useState('')
+
+  // Clear error when switching modes
+  useEffect(() => {
+    setError('')
+  }, [isRegistering])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()

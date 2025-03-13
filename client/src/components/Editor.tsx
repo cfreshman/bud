@@ -175,9 +175,8 @@ export function Editor({ plantData, plotIndex, onSave, onCancel, onDelete }: Edi
 
     const wasPartAdded = engineRef.current.wasPartAdded()
     if (wasPartAdded) {
-      const currentState = engineRef.current.getPlantData()
       const currentCount = engineRef.current.getCurrentPartCount()
-      const delta = Math.max(0, currentCount - originalPartCountRef.current)
+      const delta = currentCount - originalPartCountRef.current
       setStars(prev => ({
         ...prev,
         currentStars: prev.currentStars - delta
@@ -244,7 +243,7 @@ export function Editor({ plantData, plotIndex, onSave, onCancel, onDelete }: Edi
     
     // Calculate star cost delta
     const currentCount = engineRef.current.getCurrentPartCount()
-    const delta = Math.max(0, currentCount - originalPartCountRef.current)
+    const delta = currentCount - originalPartCountRef.current
     if (delta > stars.currentStars) {
       setError(`not enough stars (need ${delta}, have ${stars.currentStars})`)
       return
