@@ -136,7 +136,21 @@ router.post('/:plotIndex/chat', auth, async (req, res) => {
     // Process actions and get final response
     const response = await processChatResponse(req.user.userId, actions)
 
-    res.json({ message: response })
+    // Get updated star counts if any stars were awarded
+    const starAction = actions.find(a => a.type === 'award_star')
+    let stars = null
+    if (starAction) {
+      const user = await User.findById(req.user.userId)
+      stars = {
+        totalStars: user.totalStars,
+        currentStars: user.currentStars
+      }
+    }
+
+    res.json({ 
+      message: response,
+      stars // Only included if stars were awarded
+    })
   } catch (error) {
     console.error('Failed to get plant response:', error)
     res.status(500).json({ message: 'error getting plant response' })

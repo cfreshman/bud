@@ -15,8 +15,13 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ message: 'username already taken' });
     }
 
-    // Create new user
-    const user = new User({ username, password });
+    // Create new user with 20 stars
+    const user = new User({ 
+      username, 
+      password,
+      totalStars: 20,
+      currentStars: 20
+    });
     await user.save();
 
     // Generate JWT token

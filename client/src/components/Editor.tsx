@@ -20,14 +20,19 @@ export function Editor({ plantData, plotIndex, onSave, onCancel, onDelete }: Edi
   const containerRef = useRef<HTMLDivElement>(null)
   const engineRef = useRef<BudEngine | null>(null)
   const cleanupRef = useRef(false)
+  const originalPartCountRef = useRef(0)
+  const starsRef = useRef<StarCounts>({ totalStars: 0, currentStars: 0 })
   const [selectedPart, setSelectedPart] = useState<EditableProperties | null>(null)
   const [stars, setStars] = useState<StarCounts>({ totalStars: 0, currentStars: 0 })
+  const [displayStars, setDisplayStars] = useState<StarCounts>({ totalStars: 0, currentStars: 0 })
   const [error, setError] = useState<string>('')
-  const [originalPartCount, setOriginalPartCount] = useState(0)
-  const [activeEditingPlant, setActiveEditingPlant] = useState<PlantData | null>(null)
-  const [selectedPlot, setSelectedPlot] = useState<number>(0)
-  const [isEditing, setIsEditing] = useState(false)
-  
+
+  // Update starsRef when stars state changes
+  useEffect(() => {
+    starsRef.current = stars
+    setDisplayStars(stars)
+  }, [stars])
+
   // Load star counts on mount
   useEffect(() => {
     const loadStars = async () => {
@@ -47,11 +52,7 @@ export function Editor({ plantData, plotIndex, onSave, onCancel, onDelete }: Edi
     if (editorStateStr) {
       try {
         const editorState = JSON.parse(editorStateStr)
-        const plantData = deserializePlantData(editorState.plantData)
-        setOriginalPartCount(editorState.originalPartCount || 0)
-        setActiveEditingPlant(plantData)
-        setSelectedPlot(editorState.plotIndex)
-        setIsEditing(true)
+        originalPartCountRef.current = editorState.originalPartCount || 0
       } catch (error) {
         console.error('Failed to load editor state:', error)
         localStorage.removeItem('editor_plant_state')
@@ -80,25 +81,27 @@ export function Editor({ plantData, plotIndex, onSave, onCancel, onDelete }: Edi
         onDeselect: () => {
           setSelectedPart(null)
         },
-        onPartCountChange: (count) => {
-          const delta = Math.max(0, count - originalPartCount)
-          setStars(prev => {
-            const newCurrentStars = prev.totalStars - delta
-            if (newCurrentStars < 0) {
-              setError(`not enough stars (need ${delta}, have ${prev.totalStars})`)
-              engineRef.current?.hidePartPreviews()
-            } else if (newCurrentStars === 0) {
-              setError('')
-              engineRef.current?.hidePartPreviews()
-            } else {
-              setError('')
-              engineRef.current?.showPartPreviews()
-            }
-            return {
-              ...prev,
-              currentStars: newCurrentStars
-            }
+        onPartCountChange: (totalCount) => {
+          const delta = totalCount - originalPartCountRef.current
+          const needed = starsRef.current.currentStars - delta
+          console.log({ delta, needed })
+
+          // Update display stars to show projected count
+          setDisplayStars({
+            totalStars: starsRef.current.totalStars,
+            currentStars: starsRef.current.currentStars - delta
           })
+
+          if (needed < 0) {
+            setError(`not enough stars (need ${-needed} more)`)
+            engineRef.current?.hidePartPreviews()
+          } else if (needed === 0) {
+            setError('')
+            engineRef.current?.hidePartPreviews()
+          } else {
+            setError('')
+            engineRef.current?.showPartPreviews()
+          }
         }
       })
     }
@@ -108,14 +111,14 @@ export function Editor({ plantData, plotIndex, onSave, onCancel, onDelete }: Edi
       engineRef.current.setPlantData(plantData)
       // Need to wait a frame for the plant to render before getting count
       requestAnimationFrame(() => {
-        const count = engineRef.current?.getCurrentPartCount() || 0
-        setOriginalPartCount(count)
+        const initialCount = engineRef.current?.getCurrentPartCount() || 0
+        originalPartCountRef.current = initialCount
         
         // Save initial state with original part count
         const editorState = {
           plotIndex,
           plantData: serializePlantData(plantData),
-          originalPartCount: count
+          originalPartCount: initialCount
         }
         localStorage.setItem('editor_plant_state', JSON.stringify(editorState))
       })
@@ -147,7 +150,7 @@ export function Editor({ plantData, plotIndex, onSave, onCancel, onDelete }: Edi
         const editorState = {
           plotIndex,
           plantData: serializePlantData(currentState),
-          originalPartCount
+          originalPartCount: originalPartCountRef.current
         }
         localStorage.setItem('editor_plant_state', JSON.stringify(editorState))
       }
@@ -164,7 +167,7 @@ export function Editor({ plantData, plotIndex, onSave, onCancel, onDelete }: Edi
         localStorage.removeItem('editor_plant_state')
       }
     }
-  }, [plotIndex, originalPartCount])
+  }, [plotIndex])
 
   // Remove the validation effect since we're using the callback now
   useEffect(() => {
@@ -174,10 +177,10 @@ export function Editor({ plantData, plotIndex, onSave, onCancel, onDelete }: Edi
     if (wasPartAdded) {
       const currentState = engineRef.current.getPlantData()
       const currentCount = engineRef.current.getCurrentPartCount()
-      const delta = Math.max(0, currentCount - originalPartCount)
+      const delta = Math.max(0, currentCount - originalPartCountRef.current)
       setStars(prev => ({
         ...prev,
-        currentStars: prev.totalStars - delta
+        currentStars: prev.currentStars - delta
       }))
     }
   }, [selectedPart])
@@ -241,9 +244,9 @@ export function Editor({ plantData, plotIndex, onSave, onCancel, onDelete }: Edi
     
     // Calculate star cost delta
     const currentCount = engineRef.current.getCurrentPartCount()
-    const delta = Math.max(0, currentCount - originalPartCount)
-    if (delta > stars.totalStars) {
-      setError(`not enough stars (need ${delta}, have ${stars.totalStars})`)
+    const delta = Math.max(0, currentCount - originalPartCountRef.current)
+    if (delta > stars.currentStars) {
+      setError(`not enough stars (need ${delta}, have ${stars.currentStars})`)
       return
     }
     setError('')
@@ -312,7 +315,7 @@ export function Editor({ plantData, plotIndex, onSave, onCancel, onDelete }: Edi
         </button>
         <div className="star-count">
           <Star weight="fill" />
-          {stars.currentStars}/{stars.totalStars}
+          {displayStars.currentStars}/{displayStars.totalStars}
         </div>
         <button 
           className="control-button save" 

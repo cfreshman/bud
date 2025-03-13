@@ -169,15 +169,20 @@ export function ChatView({ plant, plotIndex, onClose }: ChatViewProps) {
 
     try {
       // Get plant's response from API using plotIndex
-      const plantResponse = await sendMessageToPlant(plotIndex.toString(), input, plant)
+      const response = await sendMessageToPlant(plotIndex.toString(), input, plant)
       
       // Add plant message
-      const plantMessage = chatEngine.addMessage(plant.plantId, plantResponse, 'plant')
+      const plantMessage = chatEngine.addMessage(plant.plantId, response.message, 'plant')
       
       // Update messages state and save to MongoDB
       const newMessages = [...messages, userMessage, plantMessage]
       setMessages(newMessages)
       await saveMessages(plotIndex, newMessages)
+
+      // Update star counts if they changed
+      if (response.stars) {
+        setStars(response.stars)
+      }
     } catch (error) {
       console.error('Error getting plant response:', error)
       // Add fallback message if API fails
