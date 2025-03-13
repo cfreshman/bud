@@ -5,7 +5,7 @@ import { ViewEngine } from '../engine/ViewEngine';
 import { PlantData } from '../engine/types';
 import { AppText } from './AppText';
 import { LoadingScreen } from './LoadingScreen';
-import { sendMessageToPlant, Message, loadChatHistory, saveChatHistory } from '../services/api';
+import { sendMessageToPlant, Message, loadChatHistory, saveChatHistory, getStarCounts, StarCounts } from '../services/api';
 import * as THREE from 'three';
 import { Renderer } from 'expo-three';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -32,6 +32,9 @@ export function PlantView({ plant, plotIndex = 0, onLogout }: PlantViewProps) {
   const scrollViewRef = useRef<ScrollView>(null);
   const [showHistory, setShowHistory] = useState(false);
   const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
+
+  // Add star count state
+  const [stars, setStars] = useState<StarCounts>({ totalStars: 0, currentStars: 0 })
 
   // Log when component mounts and unmounts
   useEffect(() => {
@@ -251,47 +254,41 @@ export function PlantView({ plant, plotIndex = 0, onLogout }: PlantViewProps) {
     setInput('');
     setIsMessageLoading(true);
     
-    // Create user message
-    const userMessage: Message = {
-      id: Math.random().toString(),
-      plantId: plant.plantId || '0',
-      content: cleanInput,
-      sender: 'user',
-      timestamp: Date.now()
-    };
-    
     try {
-      // Add user message to messages
-      setMessages(prev => [...prev, userMessage]);
+      const response = await sendMessageToPlant(plotIndex, cleanInput, plant);
       
-      // Get plant's response using plotIndex
-      const plantResponse = await sendMessageToPlant(plotIndex, cleanInput, plant);
+      // Update star counts if they changed
+      if (response.stars) {
+        setStars(response.stars);
+      }
+
+      // Add messages to chat
+      const userMessage: Message = {
+        id: Math.random().toString(),
+        plantId: plant.plantId || '',
+        content: cleanInput,
+        sender: 'user',
+        timestamp: Date.now()
+      };
       
-      // Create plant message
       const plantMessage: Message = {
         id: Math.random().toString(),
-        plantId: plant.plantId || '0',
-        content: plantResponse,
+        plantId: plant.plantId || '',
+        content: response.message,
         sender: 'plant',
         timestamp: Date.now()
       };
       
-      // Add plant message to messages
-      setMessages(prev => [...prev, plantMessage]);
+      const newMessages = [...messages, userMessage, plantMessage];
+      setMessages(newMessages);
+      
+      // Save messages to cloud
+      await saveChatHistory(plotIndex, newMessages);
       
       // Scroll to bottom
       scrollViewRef.current?.scrollToEnd({ animated: true });
     } catch (error) {
-      console.error('Error getting plant response:', error);
-      // Add fallback message if API fails
-      const fallbackMessage: Message = {
-        id: Math.random().toString(),
-        plantId: plant.plantId || '0',
-        content: "I'm having trouble understanding right now.",
-        sender: 'plant',
-        timestamp: Date.now()
-      };
-      setMessages(prev => [...prev, fallbackMessage]);
+      console.error('Error sending message:', error);
     } finally {
       setIsMessageLoading(false);
     }
@@ -325,6 +322,19 @@ export function PlantView({ plant, plotIndex = 0, onLogout }: PlantViewProps) {
     };
   }, []);
 
+  // Load star counts on mount
+  useEffect(() => {
+    const loadStars = async () => {
+      try {
+        const counts = await getStarCounts()
+        setStars(counts)
+      } catch (err) {
+        console.error('Failed to load star counts:', err)
+      }
+    }
+    loadStars()
+  }, [])
+
   return (
     <View style={[styles.container, { width: window.width }]}>
       {/* Keyboard dismiss overlay - only shown when keyboard is open */}
@@ -350,6 +360,13 @@ export function PlantView({ plant, plotIndex = 0, onLogout }: PlantViewProps) {
           >
             <AppText style={styles.historyButtonText}>history</AppText>
           </TouchableOpacity>
+        </SafeAreaView>
+
+        {/* Star count */}
+        <SafeAreaView style={[styles.starCountContainer, { pointerEvents: 'none' }]} edges={['top']}>
+          <View style={[styles.historyButton, { pointerEvents: 'auto' }]}>
+            <AppText style={styles.historyButtonText}>⭐ {stars.currentStars}</AppText>
+          </View>
         </SafeAreaView>
 
         {/* Logout button */}
@@ -667,5 +684,33 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     zIndex: 1000,
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 1,
+  },
+  button: {
+    backgroundColor: '#fdfdfd',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#000000',
+  },
+  starCountContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    padding: 16,
   },
 }); 

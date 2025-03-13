@@ -10,6 +10,11 @@ export interface Message {
   timestamp: number;
 }
 
+export interface StarCounts {
+  totalStars: number;
+  currentStars: number;
+}
+
 const headers = {
   'Content-Type': 'application/json',
   'Accept': 'application/json'
@@ -116,7 +121,7 @@ export async function sendMessageToPlant(
   plotIndex: number,
   message: string,
   plantData: PlantData
-): Promise<string> {
+): Promise<{ message: string, stars?: StarCounts }> {
   try {
     // Extract relevant plant attributes for personality
     const plantAttributes = {
@@ -148,10 +153,29 @@ export async function sendMessageToPlant(
       throw new Error(errorData.error || 'Failed to get response from plant');
     }
 
-    const data = await response.json();
-    return data.message;
+    return response.json();
   } catch (error) {
     console.error('Error sending message to plant:', error);
-    return 'Meep.';
+    return { message: 'Meep.' };
   }
+}
+
+/**
+ * Get user's star counts
+ */
+export async function getStarCounts(): Promise<StarCounts> {
+  const token = await getToken();
+  if (!token) throw new Error('not authenticated');
+
+  const response = await fetch(`${apiUrl}/plants/stars`, {
+    headers: {
+      'Authorization': `Bearer ${token}`
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error('Failed to get star counts');
+  }
+
+  return response.json();
 } 
