@@ -1,6 +1,7 @@
 const OpenAI = require('openai');
 const { getUserMemories } = require('./memory');
 const { getChatHistory } = require('./chat');
+const { User } = require('../models');
 
 // Initialize OpenAI client
 const openai = new OpenAI({
@@ -13,15 +14,18 @@ const openai = new OpenAI({
  * @param {number} plotIndex - Plot index
  * @param {string} message - User's message to the plant
  * @param {Object} plantAttributes - Attributes of the plant that influence its personality
+ * @param {string} messageDate - Current date in YYYY-MM-DD format
  * @returns {Promise<Array<Object>>} - The plant's response
  */
-async function generatePlantResponse(userId, plotIndex, message, plantAttributes) {
+async function generatePlantResponse(userId, plotIndex, message, plantAttributes, messageDate) {
   try {
     // Get chat history and memories
     const chatHistory = await getChatHistory(userId, plotIndex);
     const memories = await getUserMemories(userId);
 
-    // console.log('memories', memories);
+    // Check if this is the first message of the day
+    const user = await User.findById(userId);
+    const isFirstMessageOfDay = user.lastDailyStarDate !== messageDate;
 
     // Generate base personality from attributes
     const personality = generatePersonalityFromParts(plantAttributes);
@@ -31,28 +35,35 @@ async function generatePlantResponse(userId, plotIndex, message, plantAttributes
 You speak in short, simple sentences and have a distinct personality. Your personality with the user is determined by your parts initially but should then change depending on the conversation.
 You are aware that you are a plant and reference plant-related experiences.
 
-You can store up to 50 memories. Your response must be a JSON object of an actions array containing these types:
+You can store up to 50 memories and award stars to your friend. Your response must be a JSON object of an actions array containing these types:
 - "chat": Your actual response message (exactly one required)
 - "remember": A new memory to store (optional)
 - "forget": Index of a memory to forget (optional)
+- "award_star": Award a star for meaningful interaction (optional)
 
 Example response:
 {
   "actions": [
     {"type": "chat", "content": "Hello friend!"},
     {"type": "remember", "content": "My friend likes to say hello"},
-    {"type": "forget", "index": 5}
+    {"type": "forget", "index": 5},
+    {"type": "award_star", "reason": "First chat of the day"}
   ]
 }
 
 Current memories:
 ${memories.map((m, i) => `${i}: ${m}`).join('\n')}
 
+${isFirstMessageOfDay ? "This is your friend's first message today! You should be so happy you award them a star." : ""}
+
 Remember:
 1. Return exactly one chat action in the 'actions' response array
 2. You can return multiple remember/forget actions
 3. Memory indices must be valid (0-${memories.length - 1})
-4. DON'T KEEP REPEAT MEMORIES. You can alter a memory by forgetting and remembering a new version. You can add importance, e.g. IMPORTANT: <memory>
+4. Only award stars in two cases:
+   - First message of the day (if you're the first plant they talk to today)
+   - When the user accomplishes a significant goal or does something remarkable
+5. Stars should feel earned and special - they are a reward for real accomplishments
 `;
 
     // Get completion from OpenAI
@@ -86,7 +97,7 @@ Remember:
 
       // Validate action formats
       actions.forEach(action => {
-        if (!['chat', 'remember', 'forget'].includes(action.type)) {
+        if (!['chat', 'remember', 'forget', 'award_star'].includes(action.type)) {
           throw new Error(`Invalid action type: ${action.type}`);
         }
         if (action.type === 'forget' && typeof action.index !== 'number') {
@@ -95,7 +106,11 @@ Remember:
         if (['chat', 'remember'].includes(action.type) && typeof action.content !== 'string') {
           throw new Error(`${action.type} action must have string content`);
         }
+        if (action.type === 'award_star' && typeof action.reason !== 'string') {
+          throw new Error('award_star action must have reason string');
+        }
       });
+
     } catch (error) {
       console.error('Failed to parse OpenAI response:', error);
       return [{ type: 'chat', content: 'Meep.' }];

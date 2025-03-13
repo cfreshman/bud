@@ -1,4 +1,5 @@
 const mongoose = require('mongoose')
+const bcrypt = require('bcryptjs')
 
 // Plant schema
 const plantSchema = new mongoose.Schema({
@@ -31,6 +32,58 @@ const plantSchema = new mongoose.Schema({
     unique: true
   }
 })
+
+// User schema
+const userSchema = new mongoose.Schema({
+  username: {
+    type: String,
+    required: true,
+    unique: true,
+    trim: true,
+    minlength: 3,
+    maxlength: 8
+  },
+  password: {
+    type: String,
+    required: true
+  },
+  totalStars: {
+    type: Number,
+    default: 20,
+    min: 0
+  },
+  currentStars: {
+    type: Number,
+    default: 20,
+    min: 0
+  },
+  lastDailyStarDate: {  // Track when user last got their daily star
+    type: String,  // YYYY-MM-DD format
+    default: null
+  },
+  createdAt: {
+    type: Date,
+    default: Date.now
+  }
+})
+
+// Hash password before saving
+userSchema.pre('save', async function(next) {
+  if (!this.isModified('password')) return next();
+  
+  try {
+    const salt = await bcrypt.genSalt(10);
+    this.password = await bcrypt.hash(this.password, salt);
+    next();
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Method to compare passwords
+userSchema.methods.comparePassword = async function(candidatePassword) {
+  return bcrypt.compare(candidatePassword, this.password);
+};
 
 // Chat history schema
 const chatHistorySchema = new mongoose.Schema({
@@ -80,9 +133,11 @@ chatHistorySchema.index({ userId: 1, plotIndex: 1 }, { unique: true })
 const Plant = mongoose.model('Plant', plantSchema)
 const ChatHistory = mongoose.model('ChatHistory', chatHistorySchema)
 const Memory = mongoose.model('Memory', memorySchema)
+const User = mongoose.model('User', userSchema)
 
 module.exports = {
   Plant,
   ChatHistory,
-  Memory
-} 
+  Memory,
+  User
+}

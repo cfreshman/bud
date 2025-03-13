@@ -1,4 +1,4 @@
-const { Memory } = require('../models');
+const { Memory, User } = require('../models');
 
 // Get all memories for a user
 async function getUserMemories(userId) {
@@ -55,6 +55,15 @@ async function processChatResponse(userId, actions) {
         if (typeof action.index === 'number') {
           memoryUpdates.toRemove.add(action.index);
         }
+        break;
+      case 'award_star':
+        // Update user's stars
+        await User.findByIdAndUpdate(userId, {
+          $inc: { 
+            totalStars: 1,
+            currentStars: 1
+          }
+        });
         break;
     }
   }
