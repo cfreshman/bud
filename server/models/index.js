@@ -49,12 +49,12 @@ const userSchema = new mongoose.Schema({
   },
   totalStars: {
     type: Number,
-    default: 20,
+    default: 0,
     min: 0
   },
   currentStars: {
     type: Number,
-    default: 20,
+    default: 0,
     min: 0
   },
   lastDailyStarDate: {  // Track when user last got their daily star
