@@ -26,12 +26,21 @@ function App() {
   const [sharedBudClaimed, setSharedBudClaimed] = useState(false)
   const viewEngineRef = useRef<ViewEngine | null>(null)
   const [isMobile, setIsMobile] = useState(false)
+  const [username, setUsername] = useState('')
 
   // Check auth state on mount
   useEffect(() => {
     const checkAuth = async () => {
       setIsAuthChecking(true)
-      setIsAuthenticated(isLoggedIn())
+      const loggedIn = isLoggedIn()
+      setIsAuthenticated(loggedIn)
+      if (loggedIn) {
+        // Get username from localStorage
+        const storedUsername = localStorage.getItem('username')
+        if (storedUsername) {
+          setUsername(storedUsername)
+        }
+      }
       setIsAuthChecking(false)
     }
     checkAuth()
@@ -265,6 +274,7 @@ function App() {
 
   const handleLogout = () => {
     setIsAuthenticated(false)
+    setUsername('')
     setPlants(new Map())
     setSelectedPlot(null)
     setIsEditing(false)
@@ -273,14 +283,24 @@ function App() {
     localStorage.clear() // Clear all plant and chat data
   }
 
+  const handleLogin = (newUsername: string) => {
+    setIsAuthenticated(true)
+    setUsername(newUsername)
+    localStorage.setItem('username', newUsername)
+  }
+
   if (isMobile) {
     if (isAuthChecking || isLoading) {
       return <LoadingScreen />;
     }
     if (!isAuthenticated) {
-      return <LoginView onLogin={() => setIsAuthenticated(true)} />;
+      return <LoginView onLogin={handleLogin} />;
     }
-    return <MobileView sharedBudClaimed={sharedBudClaimed} />;
+    return <MobileView 
+      sharedBudClaimed={sharedBudClaimed} 
+      onLogout={handleLogout}
+      username={username}
+    />;
   }
 
   return (
@@ -288,7 +308,7 @@ function App() {
       {isAuthChecking || isLoading ? (
         <LoadingScreen />
       ) : !isAuthenticated ? (
-        <LoginView onLogin={() => setIsAuthenticated(true)} />
+        <LoginView onLogin={handleLogin} />
       ) : isEditing ? (
         <Editor 
           plantData={activeEditingPlant}

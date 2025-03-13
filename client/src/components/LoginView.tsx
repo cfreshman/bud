@@ -1,7 +1,12 @@
 import { useState } from 'react'
 import { login, register, setToken } from '../services/auth'
 
-export function LoginView({ onLogin }: { onLogin: () => void }) {
+interface LoginViewProps {
+  onLogin: (username: string) => void;
+}
+
+export function LoginView({ onLogin }: LoginViewProps) {
+  const [isLogin, setIsLogin] = useState(true)
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [isRegistering, setIsRegistering] = useState(false)
@@ -17,7 +22,7 @@ export function LoginView({ onLogin }: { onLogin: () => void }) {
         : await login(username, password)
       
       setToken(response.token)
-      onLogin()
+      onLogin(username)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'something went wrong')
     }

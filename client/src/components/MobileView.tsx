@@ -2,9 +2,11 @@ import React from 'react';
 
 interface MobileViewProps {
   sharedBudClaimed?: boolean;
+  onLogout: () => void;
+  username: string;
 }
 
-export function MobileView({ sharedBudClaimed }: MobileViewProps) {
+export function MobileView({ sharedBudClaimed, onLogout, username }: MobileViewProps) {
   return (
     <div className="mobile-view">
       <svg 
@@ -21,6 +23,15 @@ export function MobileView({ sharedBudClaimed }: MobileViewProps) {
       </svg>
 
       <div className="mobile-content" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+        <div className="download-buttons">
+          <button 
+            className="download-button"
+            onClick={onLogout}
+          >
+            log out {username}
+          </button>
+        </div>
+
         {sharedBudClaimed && (
           <div className="mobile-message">
             <p>you claimed a bud!</p>
