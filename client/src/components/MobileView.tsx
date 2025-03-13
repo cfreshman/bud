@@ -21,7 +21,7 @@ export function MobileView({ sharedBudClaimed, onLogout, username }: MobileViewP
         <div className="mobile-message">
           <p>looking to manage your buds?</p>
           <p>open this page on desktop!</p>
-          <p>while bud share links work on mobile, you can't manage your buds. that requires a mouse!</p>
+          <p>gift links do work here but managing your buds requires a mouse</p>
         </div>
         <div className="download-buttons">
           <button 
