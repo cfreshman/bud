@@ -254,6 +254,18 @@ export function PlantView({ plant, plotIndex = 0, onLogout }: PlantViewProps) {
     setInput('');
     setIsMessageLoading(true);
     
+    // Create and show user message immediately
+    const userMessage: Message = {
+      id: Math.random().toString(),
+      plantId: plant.plantId || '',
+      content: cleanInput,
+      sender: 'user',
+      timestamp: Date.now()
+    };
+    
+    // Update messages state immediately with user message
+    setMessages(prev => [...prev, userMessage]);
+    
     try {
       const response = await sendMessageToPlant(plotIndex, cleanInput, plant);
       
@@ -262,15 +274,7 @@ export function PlantView({ plant, plotIndex = 0, onLogout }: PlantViewProps) {
         setStars(response.stars);
       }
 
-      // Add messages to chat
-      const userMessage: Message = {
-        id: Math.random().toString(),
-        plantId: plant.plantId || '',
-        content: cleanInput,
-        sender: 'user',
-        timestamp: Date.now()
-      };
-      
+      // Add plant message
       const plantMessage: Message = {
         id: Math.random().toString(),
         plantId: plant.plantId || '',
@@ -279,6 +283,7 @@ export function PlantView({ plant, plotIndex = 0, onLogout }: PlantViewProps) {
         timestamp: Date.now()
       };
       
+      // Update messages with both user and plant messages
       const newMessages = [...messages, userMessage, plantMessage];
       setMessages(newMessages);
       
