@@ -7,8 +7,10 @@ import { loadChatHistory, saveChatHistory, clearChatHistory } from '../services/
  * @param messages The messages to save
  */
 export async function saveMessages(plotIndex: number, messages: Message[]): Promise<void> {
+  console.log('Saving messages:', { plotIndex, messageCount: messages.length })
   try {
     await saveChatHistory(plotIndex, messages)
+    console.log('Messages saved successfully')
   } catch (error) {
     console.error('Error saving chat messages:', error)
   }
@@ -20,8 +22,11 @@ export async function saveMessages(plotIndex: number, messages: Message[]): Prom
  * @returns The messages for the plot, or an empty array if none exist
  */
 export async function loadMessages(plotIndex: number): Promise<Message[]> {
+  console.log('Loading messages for plot:', plotIndex)
   try {
-    return await loadChatHistory(plotIndex)
+    const messages = await loadChatHistory(plotIndex)
+    console.log('Loaded messages:', { count: messages.length })
+    return messages
   } catch (error) {
     console.error('Error loading chat messages:', error)
     return []
@@ -33,8 +38,10 @@ export async function loadMessages(plotIndex: number): Promise<Message[]> {
  * @param plotIndex The plot index
  */
 export async function clearMessages(plotIndex: number): Promise<void> {
+  console.log('Clearing messages for plot:', plotIndex)
   try {
     await clearChatHistory(plotIndex)
+    console.log('Messages cleared successfully')
   } catch (error) {
     console.error('Error clearing chat messages:', error)
   }

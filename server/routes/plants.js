@@ -151,6 +151,11 @@ router.put('/:plotIndex/chat', auth, async (req, res) => {
       return res.status(400).json({ message: 'invalid plot index' })
     }
 
+    // Don't create new chat history if messages array is empty
+    if (!req.body.messages || req.body.messages.length === 0) {
+      return res.status(200).json({ message: 'no messages to save' })
+    }
+
     await ChatHistory.findOneAndUpdate(
       { userId: req.user.userId, plotIndex },
       { 
@@ -176,8 +181,13 @@ router.delete('/:plotIndex/chat', auth, async (req, res) => {
       return res.status(400).json({ message: 'invalid plot index' })
     }
 
+    console.log('Deleting chat history for plotIndex:', plotIndex, 'for userId:', req.user.userId)
+
     // Delete chat history
-    await ChatHistory.deleteOne({ userId: req.user.userId, plotIndex })
+    await ChatHistory.deleteOne({ 
+      userId: req.user.userId, 
+      plotIndex 
+    })
 
     // Clear memories for this user
     await Memory.findOneAndUpdate(
@@ -186,7 +196,11 @@ router.delete('/:plotIndex/chat', auth, async (req, res) => {
       { upsert: true }
     )
 
-    res.status(200).json({ message: 'chat history and memories deleted' })
+    // Return empty array to ensure client state is cleared
+    res.status(200).json({ 
+      message: 'chat history and memories deleted',
+      messages: []
+    })
   } catch (error) {
     console.error('Failed to delete chat history:', error)
     res.status(500).json({ message: 'error deleting chat history' })
