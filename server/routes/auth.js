@@ -15,12 +15,12 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ message: 'username already taken' });
     }
 
-    // Create new user with 20 stars
+    // Create new user with 10 stars
     const user = new User({ 
       username, 
       password,
-      totalStars: 20,
-      currentStars: 20
+      totalStars: 10,
+      currentStars: 10
     });
     await user.save();
 

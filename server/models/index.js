@@ -135,6 +135,22 @@ const ChatHistory = mongoose.model('ChatHistory', chatHistorySchema)
 const Memory = mongoose.model('Memory', memorySchema)
 const User = mongoose.model('User', userSchema)
 
+// Migration function to update users with null stars
+async function updateNullStarUsers() {
+  try {
+    const result = await User.updateMany(
+      { totalStars: null },
+      { $set: { totalStars: 10, currentStars: 10 } }
+    );
+    console.log(`Updated ${result.modifiedCount} users with null stars to 10 stars`);
+  } catch (error) {
+    console.error('Error updating null star users:', error);
+  }
+}
+
+// Run migration when models are initialized
+updateNullStarUsers();
+
 module.exports = {
   Plant,
   ChatHistory,
