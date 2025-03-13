@@ -57,7 +57,7 @@ export function PlotMenu({ position, onSelect, onClose, isCarried = false, share
                 className="plot-menu-item"
                 onClick={() => onSelect('share')}
               >
-                share
+                gift
               </button>
             )}
           </>
@@ -73,7 +73,7 @@ export function PlotMenu({ position, onSelect, onClose, isCarried = false, share
               className="plot-menu-item"
               onClick={() => onSelect('unshare')}
             >
-              unshare
+              undo
             </button>
           </>
         )}
