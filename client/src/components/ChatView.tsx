@@ -3,6 +3,8 @@ import { PlantData } from '../engine/types'
 import { ChatEngine, Message } from '../engine/ChatEngine'
 import { sendMessageToPlant } from '../services/api'
 import { loadMessages, saveMessages, clearMessages } from '../utils/chatStorage'
+import { getStarCounts, StarCounts } from '../services/api'
+import { Star } from '@phosphor-icons/react'
 
 interface ChatViewProps {
   plant: PlantData
@@ -18,6 +20,35 @@ export function ChatView({ plant, plotIndex, onClose }: ChatViewProps) {
   const [showHistory, setShowHistory] = useState(false)
   const [messages, setMessages] = useState<Message[]>([])
   const [isLoading, setIsLoading] = useState(false)
+  const [stars, setStars] = useState<StarCounts>({ totalStars: 0, currentStars: 0 })
+
+  // Load star counts on mount
+  useEffect(() => {
+    const loadStars = async () => {
+      try {
+        const counts = await getStarCounts()
+        setStars(counts)
+      } catch (err) {
+        console.error('Failed to load star counts:', err)
+      }
+    }
+    loadStars()
+  }, [])
+
+  // Add focus event listener to reload stars
+  useEffect(() => {
+    const handleFocus = async () => {
+      try {
+        const counts = await getStarCounts()
+        setStars(counts)
+      } catch (error) {
+        console.error('Failed to reload star counts:', error)
+      }
+    }
+
+    window.addEventListener('focus', handleFocus)
+    return () => window.removeEventListener('focus', handleFocus)
+  }, [])
 
   // Load messages when component mounts
   useEffect(() => {
@@ -211,6 +242,20 @@ export function ChatView({ plant, plotIndex, onClose }: ChatViewProps) {
     <div style={{ width: '100%', height: '100%', position: 'relative' }}>
       <div ref={containerRef} style={{ position: 'absolute', inset: 0 }} />
       
+      {/* Star count centered at top */}
+      <div style={{ 
+        position: 'fixed',
+        top: '20px',
+        left: '50%',
+        transform: 'translateX(-50%)',
+        zIndex: 1000
+      }}>
+        <div className="chat-button" style={{ cursor: 'default', border: '1px solid transparent', backgroundClip: 'padding-box' }}>
+          <Star weight="fill" style={{ marginRight: '4px' }} />
+          {stars.currentStars}/{stars.totalStars}
+        </div>
+      </div>
+
       {/* Input container with buttons on either side */}
       <div className="chat-controls">
         {/* Return button */}

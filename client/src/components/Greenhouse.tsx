@@ -5,9 +5,10 @@ import { deserializePlantData } from '../utils/plantSaveUtils'
 import { PlotMenu } from './PlotMenu'
 import { ChatView } from './ChatView'
 import { removeToken, getToken } from '../services/auth'
-import { carryPlant, uncarryPlant, sharePlant, unsharePlant } from '../services/api'
+import { carryPlant, uncarryPlant, sharePlant, unsharePlant, getStarCounts, StarCounts } from '../services/api'
 import { loadPlants } from '../services/plants'
 import { WS_URL } from '../config'
+import { Star } from '@phosphor-icons/react'
 
 interface GreenhouseProps {
   plants: Map<number, PlantData>
@@ -32,12 +33,26 @@ export function Greenhouse({
   const [menuState, setMenuState] = useState<{ position: { x: number, y: number }, plotIndex: number, isLinkCopied?: boolean } | null>(null)
   const [chatState, setChatState] = useState<{ plant: PlantData } | null>(null)
   const [carriedPlotIndex, setCarriedPlotIndex] = useState<number | null>(null)
+  const [stars, setStars] = useState<StarCounts>({ totalStars: 0, currentStars: 0 })
   
   // Store callback in ref to avoid effect dependency
   const onSelectPlotRef = useRef(onSelectPlot)
   onSelectPlotRef.current = onSelectPlot
 
-  // Add focus event listener to reload plants
+  // Load star counts on mount
+  useEffect(() => {
+    const loadStars = async () => {
+      try {
+        const counts = await getStarCounts()
+        setStars(counts)
+      } catch (err) {
+        console.error('Failed to load star counts:', err)
+      }
+    }
+    loadStars()
+  }, [])
+
+  // Add focus event listener to reload plants and stars
   useEffect(() => {
     const handleFocus = async () => {
       try {
@@ -45,8 +60,10 @@ export function Greenhouse({
         if (onPlantsChange) {
           onPlantsChange(updatedPlants)
         }
+        const counts = await getStarCounts()
+        setStars(counts)
       } catch (error) {
-        console.error('Failed to reload plants on focus:', error)
+        console.error('Failed to reload data on focus:', error)
       }
     }
 
@@ -257,11 +274,16 @@ export function Greenhouse({
         left: '20px', 
         zIndex: 1000,
         display: 'flex',
-        gap: '12px'
+        gap: '12px',
+        alignItems: 'center'
       }}>
         <button className="chat-button" onClick={onLogout}>
           logout
         </button>
+        <div className="chat-button" style={{ cursor: 'default', border: '1px solid transparent', backgroundClip: 'padding-box' }}>
+          <Star weight="fill" style={{ marginRight: '4px' }} />
+          {stars.currentStars}/{stars.totalStars}
+        </div>
         {receivedPlot !== null && (
           <button 
             className="chat-button" 
