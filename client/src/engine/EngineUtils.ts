@@ -46,6 +46,7 @@ export class EngineUtils {
   protected windVelocities = new Map<string, THREE.Vector3>()
   protected windPhaseOffsets = new Map<string, {x: number, y: number, z: number}>()
   protected lastTime?: number
+  protected currentPartCount: number = 0
 
   constructor(container: HTMLElement) {
     this.domElement = container
@@ -169,6 +170,9 @@ export class EngineUtils {
     this.animationFrameId = requestAnimationFrame(() => this.animate())
     if (!this.scene || !this.renderer || !this.composer) return
     
+    // Reset part count at start of frame
+    this.currentPartCount = 0
+
     // Update wind if enabled
     if (this.isWindy) {
       const currentTime = performance.now() / 1000
@@ -315,6 +319,9 @@ export class EngineUtils {
 
   // Core plant rendering methods
   protected renderPlant(plantData: PlantData) {
+    // Reset part count
+    this.currentPartCount = 0
+
     // Store local references for rendering without modifying instance data
     const renderParts = new Map(plantData.parts)
     const renderBones = new Map(plantData.bones)
@@ -399,6 +406,9 @@ export class EngineUtils {
   ) {
     const part = data.parts.get(partId)
     if (!part) return
+
+    // Increment part count during render
+    this.currentPartCount++
 
     // Store bone to part mapping for each bone in this part
     for (const boneId of part.boneIds) {
@@ -950,5 +960,10 @@ export class EngineUtils {
       case 'stem': return 0.05
       default: return 0.2
     }
+  }
+
+  // Add method to get current part count
+  public getCurrentPartCount(): number {
+    return this.currentPartCount
   }
 } 

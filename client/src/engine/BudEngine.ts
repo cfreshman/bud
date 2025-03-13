@@ -106,6 +106,8 @@ export class BudEngine extends EngineUtils {
   protected isEditor: boolean
   protected isCloseUp: boolean
   protected plantId?: string
+  protected currentPartCount: number = 0
+  protected onPartCountChange?: (count: number) => void
 
   constructor(container: HTMLElement, callbacks?: { 
     onSelect?: (data: { 
@@ -120,10 +122,12 @@ export class BudEngine extends EngineUtils {
       twist?: number
     }) => void
     onDeselect?: () => void 
+    onPartCountChange?: (count: number) => void
   }) {
     super(container)
     this.onSelect = callbacks?.onSelect
     this.onDeselect = callbacks?.onDeselect
+    this.onPartCountChange = callbacks?.onPartCountChange
     
     // Set editor flags
     this.isEditor = true
@@ -622,6 +626,9 @@ export class BudEngine extends EngineUtils {
     this.animationFrameId = requestAnimationFrame(() => this.animate())
     if (!this.scene || !this.renderer || !this.composer) return
     
+    // Reset part count at start of frame
+    this.currentPartCount = 0
+    
     this.controls?.update()
 
     try {
@@ -676,7 +683,7 @@ export class BudEngine extends EngineUtils {
           }
         })
       })
-      
+
       // Render all root parts
       Array.from(this.roots).forEach(rootId => {
         const body = Array.from(this.bodies.values())
@@ -687,7 +694,7 @@ export class BudEngine extends EngineUtils {
       })
 
       // Restore outline selection if needed
-      if (selectedObjects.length > 0) {
+      if (selectedObjects.length > 0 && this.outlinePass) {
         // Find the new group for the selected part
         const selectedPartId = selectedObjects[0].userData.partId
         if (selectedPartId) {
@@ -697,7 +704,12 @@ export class BudEngine extends EngineUtils {
           }
         }
       }
-      
+
+      // Notify about part count change
+      if (this.onPartCountChange) {
+        this.onPartCountChange(this.currentPartCount)
+      }
+
       // Use composer instead of renderer
       this.composer?.render()
     } catch (error) {
@@ -2170,5 +2182,17 @@ export class BudEngine extends EngineUtils {
       bodies: this.bodies,
       roots: this.roots
     }
+  }
+
+  hidePartPreviews() {
+    Array.from(this.partMeshes.values()).forEach(mesh => {
+      mesh.visible = false
+    })
+  }
+
+  showPartPreviews() {
+    Array.from(this.partMeshes.values()).forEach(mesh => {
+      mesh.visible = true
+    })
   }
 }

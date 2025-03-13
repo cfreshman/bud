@@ -1,7 +1,7 @@
 const express = require('express')
 const router = express.Router()
 const auth = require('../middleware/auth')
-const { Plant, ChatHistory, Memory } = require('../models')
+const { Plant, ChatHistory, Memory, User } = require('../models')
 const { generatePlantResponse } = require('../services/openai')
 const { notifyPlantCarryUpdate, notifyWebClientUpdate } = require('../services/websocket')
 const { processChatResponse } = require('../services/memory')
@@ -419,5 +419,62 @@ router.get('/shared/:shareId', auth, async (req, res) => {
     res.status(500).json({ message: 'error getting shared plant' })
   }
 })
+
+// Update user's star count
+router.put('/stars/update', auth, async (req, res) => {
+  try {
+    const { starDelta } = req.body
+    const user = await User.findByIdAndUpdate(
+      req.user.userId,
+      { $inc: { currentStars: starDelta } },
+      { new: true }
+    )
+    if (!user) {
+      return res.status(404).json({ message: 'user not found' })
+    }
+    res.json({
+      totalStars: user.totalStars,
+      currentStars: user.currentStars
+    })
+  } catch (error) {
+    console.error('Failed to update star count:', error)
+    res.status(500).json({ message: 'error updating stars' })
+  }
+})
+
+// Get user's star counts
+router.get('/stars', auth, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.userId)
+    if (!user) {
+      return res.status(404).json({ message: 'user not found' })
+    }
+
+    res.json({
+      totalStars: user.totalStars,
+      currentStars: user.currentStars
+    })
+  } catch (error) {
+    console.error('Failed to get star counts:', error)
+    res.status(500).json({ message: 'error getting star counts' })
+  }
+})
+
+function countPartsInHierarchy(partData) {
+  if (!partData) return 0
+  // Count this part
+  let count = 1
+  // Add counts from all child parts in all bones
+  if (partData.bones) {
+    partData.bones.forEach(bone => {
+      if (bone.children) {
+        bone.children.forEach(child => {
+          count += countPartsInHierarchy(child.part)
+        })
+      }
+    })
+  }
+  return count
+}
 
 module.exports = router 

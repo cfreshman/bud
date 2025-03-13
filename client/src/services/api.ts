@@ -126,4 +126,48 @@ export async function unsharePlant(plotIndex: string): Promise<void> {
     const error = await response.json()
     throw new Error(error.message || 'failed to unshare plant')
   }
-} 
+}
+
+export interface StarCounts {
+  totalStars: number;
+  currentStars: number;
+}
+
+export async function getStarCounts(): Promise<StarCounts> {
+  const token = getToken();
+  if (!token) throw new Error('not authenticated');
+
+  const response = await fetch(`${API_URL}/plants/stars`, {
+    headers: {
+      'Authorization': `Bearer ${token}`
+    }
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.message || 'failed to get star counts');
+  }
+
+  return response.json();
+}
+
+export async function updateStars(starDelta: number): Promise<StarCounts> {
+  const token = getToken()
+  if (!token) throw new Error('not authenticated')
+
+  const response = await fetch(`${API_URL}/plants/stars/update`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    },
+    body: JSON.stringify({ starDelta })
+  })
+
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(error.message || 'failed to update stars')
+  }
+
+  return response.json()
+}

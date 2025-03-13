@@ -308,6 +308,19 @@
   color: #111419;
 }
 
+.control-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.control-button.save:disabled {
+  background: #111419;
+  border-color: #ff4444;
+  color: #ff4444;
+  opacity: 1;
+}
+
 .chat-controls {
   position: fixed;
   bottom: 24px;
@@ -903,4 +916,22 @@ button:focus-visible {
 }
 .mobile-message p:last-child {
   margin-bottom: 0;
+}
+
+.star-count {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: #111419;
+  border: 1px solid #888888;
+  color: #ffdd88;
+  padding: 0.4rem 0.75rem;
+  border-radius: 3px;
+  font-size: 12px;
+}
+
+.star-count svg {
+  width: 14px;
+  height: 14px;
+  color: #ffdd88;
 }
