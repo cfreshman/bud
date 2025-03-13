@@ -360,6 +360,11 @@ router.get('/shared/:shareId', auth, async (req, res) => {
       return res.status(404).json({ message: 'shared plant not found' })
     }
 
+    // Check if requesting user is the owner
+    if (plant.userId.toString() === req.user.userId) {
+      return res.status(200).json({ message: 'own plant' })
+    }
+
     // Find an empty plot for the current user
     const userPlants = await Plant.find({ userId: req.user.userId })
     const occupiedPlots = new Set(userPlants.map(p => p.plotIndex))

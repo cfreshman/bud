@@ -37,31 +37,44 @@ function App() {
     checkAuth()
   }, [])
 
-  // Check for shared plant link
+  // Check for shared plant in URL
   useEffect(() => {
     const checkSharedPlant = async () => {
       const path = window.location.pathname
       const match = path.match(/^\/shared\/([a-zA-Z0-9]+)$/)
       if (match && isAuthenticated) {
+        const shareId = match[1]
         try {
-          const shareId = match[1]
           const response = await fetch(`${API_URL}/plants/shared/${shareId}`, {
             headers: {
               'Authorization': `Bearer ${getToken()}`
             }
           })
-          
-          if (response.ok) {
-            const { plotIndex, serializedPlant } = await response.json()
-            const plantData = deserializePlantData(serializedPlant)
-            setPlants(prev => new Map(prev).set(plotIndex, plantData))
-            // Remove share ID from URL without reloading
+          const data = await response.json()
+
+          // If user is opening their own share link, just remove the share ID from URL
+          if (data.message === 'own plant') {
             window.history.replaceState({}, '', '/')
-            // Set shared bud claimed flag
-            setSharedBudClaimed(true)
+            return
           }
+
+          if (!response.ok) {
+            console.error('Failed to get shared plant:', data.message)
+            return
+          }
+
+          // Add the shared plant to state
+          const plant = JSON.parse(data.serializedPlant)
+          setPlants(prev => ({
+            ...prev,
+            [data.plotIndex]: plant
+          }))
+          setSharedBudClaimed(true)
+
+          // Remove share ID from URL
+          window.history.replaceState({}, '', '/')
         } catch (error) {
-          console.error('Failed to load shared plant:', error)
+          console.error('Failed to get shared plant:', error)
         }
       }
     }
