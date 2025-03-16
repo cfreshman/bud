@@ -42,7 +42,7 @@ export function LoginView({ onLogin }: LoginViewProps) {
             type="text"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
-            placeholder="username"
+            placeholder={isRegistering ? "username (3-8 lowercase letters/numbers)" : "username"}
             autoComplete="username"
             autoCapitalize="none"
           />

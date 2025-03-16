@@ -97,6 +97,8 @@ async function processChatResponse(userId, actions) {
   // Append star to chat message if we were awarded one
   if (hasAwardedStar && !chatMessage.includes('⭐️')) {
     chatMessage += ' ⭐️';
+  } else if (!hasAwardedStar && chatMessage.includes('⭐️')) {
+    chatMessage = chatMessage.replace('⭐️', '🌟');
   }
 
   return chatMessage || 'Meep.';

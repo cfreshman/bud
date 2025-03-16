@@ -9,6 +9,20 @@ router.post('/register', async (req, res) => {
   try {
     const { username, password } = req.body;
 
+    // Validate username format
+    if (username.length < 3) {
+      return res.status(400).json({ message: 'username must be at least 3 characters' });
+    }
+    if (username.length > 8) {
+      return res.status(400).json({ message: 'username must be at most 8 characters' });
+    }
+    if (username !== username.toLowerCase()) {
+      return res.status(400).json({ message: 'username must be lowercase' });
+    }
+    if (!/^[a-z0-9]+$/.test(username)) {
+      return res.status(400).json({ message: 'username can only contain letters and numbers' });
+    }
+
     // Check if username already exists
     const existingUser = await User.findOne({ username });
     if (existingUser) {

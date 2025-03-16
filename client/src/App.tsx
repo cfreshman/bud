@@ -325,6 +325,12 @@ function App() {
         <LoadingScreen />
       ) : !isAuthenticated ? (
         <LoginView onLogin={handleLogin} />
+      ) : isMobile ? (
+        <MobileView 
+          sharedBudClaimed={sharedBudClaimed} 
+          onLogout={handleLogout}
+          username={username}
+        />
       ) : isEditing ? (
         <Editor 
           plantData={activeEditingPlant}
