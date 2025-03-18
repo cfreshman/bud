@@ -14,6 +14,10 @@ export class ViewEngine extends EngineUtils {
   private boundMouseMove: (event: MouseEvent) => void = () => {}
   private boundMouseUp: () => void = () => {}
   private receivedPlotIndex: number | null = null
+  private grassInstances: THREE.InstancedMesh | null = null
+  private grassCount = 2000 // Number of grass blades
+  private grassRadius = 6 // How far out the grass extends
+  private plotPositions: THREE.Vector3[] = [] // Store plot positions for grass distribution
 
   constructor(container: HTMLElement, onSelectPlot: (plotIndex: number | null) => void) {
     super(container)
@@ -33,6 +37,9 @@ export class ViewEngine extends EngineUtils {
     // Create plots
     this.createPlots()
     
+    // Create grass
+    this.createGrass()
+    
     // Add plot selection interaction
     this.setupInteraction()
   }
@@ -40,8 +47,8 @@ export class ViewEngine extends EngineUtils {
   private createGround() {
     // Create ground plane
     const groundGeo = new THREE.CircleGeometry(5, 32)
-    // const groundMat = this.createStandardMaterial('#ccc9c5')
-    const groundMat = this.createStandardMaterial('#bbddbb')
+    // Use a darker, slightly more saturated reddish dirt color
+    const groundMat = this.createStandardMaterial('#806b60', 0.9, 0.05)
     const ground = new THREE.Mesh(groundGeo, groundMat)
     ground.rotation.x = -Math.PI / 2
     ground.receiveShadow = true
@@ -97,6 +104,139 @@ export class ViewEngine extends EngineUtils {
     group.add(dirt)
     
     return group
+  }
+
+  private createGrass() {
+    // Create a vertical rectangle geometry for grass patches
+    const grassGeo = new THREE.PlaneGeometry(0.06, 0.6);
+    // Keep vertical but move pivot to bottom
+    grassGeo.translate(0, 0.3, 0);
+    
+    // Create grass material
+    const grassMat = new THREE.MeshStandardMaterial({
+      color: '#77bb55',
+      side: THREE.DoubleSide,
+      roughness: 0.8,
+      metalness: 0.1
+    });
+
+    // Increase grass count for better coverage with uniform sampling
+    this.grassCount = 12000;
+
+    // Create instanced mesh
+    this.grassInstances = new THREE.InstancedMesh(grassGeo, grassMat, this.grassCount);
+    this.grassInstances.receiveShadow = true;
+
+    // Get ground radius from geometry
+    const groundRadius = 5; // Matches circle geometry in createGround()
+    
+    // Get accurate pot dimensions
+    const potTopRadius = 0.6;
+    const potBottomRadius = 0.4;
+    const maxPotRadius = Math.max(potTopRadius, potBottomRadius);
+    const minPotDistance = maxPotRadius + 0.1; // Add small buffer for visual spacing
+
+    // Store plot positions and create matrix/quaternion
+    const matrix = new THREE.Matrix4();
+    const quaternion = new THREE.Quaternion();
+    
+    let validInstanceCount = 0;
+    let attempts = 0;
+    const maxAttempts = this.grassCount * 2;
+
+    // Helper function to get minimum distance to any plot
+    const getMinPlotDistance = (x: number, z: number): number => {
+      let minDistance = Infinity;
+      for (const plot of this.plots) {
+        const plotPos = plot.position;
+        const dx = x - plotPos.x;
+        const dz = z - plotPos.z;
+        const distance = Math.sqrt(dx * dx + dz * dz);
+        minDistance = Math.min(minDistance, distance);
+      }
+      return minDistance;
+    };
+
+    // Helper function to place grass patch
+    const placeGrassPatch = (x: number, z: number, distanceFromCenter: number) => {
+      if (!this.grassInstances) return;
+      
+      // Calculate base height based on distance from center
+      // Edge height is 0.6, center is 25% of that (0.15)
+      // Use quadratic falloff for more gradual transition
+      const edgeHeight = 0.6;
+      const centerHeight = edgeHeight * 0.25;
+      const normalizedDist = distanceFromCenter / groundRadius;
+      const baseHeight = centerHeight + (edgeHeight - centerHeight) * Math.pow(normalizedDist, 2);
+      
+      // Add random height variation (more variation near edges)
+      const heightVariation = 0.05 + Math.pow(normalizedDist, 2) * 0.15;
+      const height = baseHeight + (Math.random() - 0.3) * heightVariation; // Bias towards taller
+
+      // Random rotation around Y for variety
+      const rotation = Math.random() * Math.PI * 2;
+      quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), rotation);
+
+      // Add slight random tilt (more tilt near edges)
+      const maxTilt = (distanceFromCenter / groundRadius) * 0.3;
+      const tiltAxis = new THREE.Vector3(
+        (Math.random() - 0.5) * maxTilt,
+        0,
+        (Math.random() - 0.5) * maxTilt
+      ).normalize();
+      const tiltQuaternion = new THREE.Quaternion();
+      tiltQuaternion.setFromAxisAngle(tiltAxis, Math.random() * maxTilt);
+      quaternion.multiply(tiltQuaternion);
+
+      // Set position and scale
+      matrix.makeRotationFromQuaternion(quaternion);
+      matrix.setPosition(x, 0, z);
+      matrix.scale(new THREE.Vector3(1, height, 1));
+
+      // Apply to instance
+      this.grassInstances.setMatrixAt(validInstanceCount, matrix);
+      validInstanceCount++;
+    };
+    
+    // Sample uniformly over x-y grid
+    while (validInstanceCount < this.grassCount && attempts < maxAttempts) {
+      // Random position in square that bounds the circle
+      const x = (Math.random() * 2 - 1) * groundRadius;
+      const z = (Math.random() * 2 - 1) * groundRadius;
+      
+      // Check if point is within ground circle
+      const distanceFromCenter = Math.sqrt(x * x + z * z);
+      if (distanceFromCenter > groundRadius) {
+        attempts++;
+        continue;
+      }
+
+      // Get minimum distance to any plot
+      const minPlotDist = getMinPlotDistance(x, z);
+      if (minPlotDist < minPotDistance) {
+        attempts++;
+        continue;
+      }
+
+      // Calculate probability based on distances
+      // Higher probability further from center AND further from pots
+      const centerFactor = Math.min(distanceFromCenter / groundRadius, 1);
+      const potFactor = Math.min((minPlotDist - minPotDistance) / 2, 1);
+      const probability = Math.pow(centerFactor * potFactor, 1.2);
+
+      if (Math.random() < probability) {
+        placeGrassPatch(x, z, distanceFromCenter);
+      }
+      
+      attempts++;
+    }
+
+    if (this.grassInstances) {
+      // Update final instance count
+      this.grassInstances.count = validInstanceCount;
+      this.grassInstances.instanceMatrix.needsUpdate = true;
+      this.scene.add(this.grassInstances);
+    }
   }
 
   private setupInteraction() {
@@ -332,6 +472,16 @@ export class ViewEngine extends EngineUtils {
     if (this.boundMouseDown) this.domElement.removeEventListener('mousedown', this.boundMouseDown)
     if (this.boundMouseMove) this.domElement.removeEventListener('mousemove', this.boundMouseMove)
     if (this.boundMouseUp) this.domElement.removeEventListener('mouseup', this.boundMouseUp)
+    
+    // Clean up grass instances
+    if (this.grassInstances) {
+      this.grassInstances.geometry.dispose();
+      if (this.grassInstances.material instanceof THREE.Material) {
+        this.grassInstances.material.dispose();
+      }
+      this.scene.remove(this.grassInstances);
+      this.grassInstances = null;
+    }
     
     // Call parent dispose first
     super.dispose()
