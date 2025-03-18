@@ -18,6 +18,7 @@ export class ViewEngine extends EngineUtils {
   private grassCount = 2000 // Number of grass blades
   private grassRadius = 6 // How far out the grass extends
   private plotPositions: THREE.Vector3[] = [] // Store plot positions for grass distribution
+  private bees: THREE.Mesh[] = [] // Store bee meshes
 
   constructor(container: HTMLElement, onSelectPlot: (plotIndex: number | null) => void) {
     super(container)
@@ -39,6 +40,9 @@ export class ViewEngine extends EngineUtils {
     
     // Create grass
     this.createGrass()
+
+    // Create bees
+    this.createBees()
     
     // Add plot selection interaction
     this.setupInteraction()
@@ -407,6 +411,36 @@ export class ViewEngine extends EngineUtils {
     }
   }
 
+  private createBees() {
+    // Create simple yellow sphere geometry and material
+    const beeGeo = new THREE.SphereGeometry(0.02, 8, 8)
+    const beeMat = new THREE.MeshBasicMaterial({
+      color: '#ffdd44',
+    })
+
+    // Create 3 bees
+    for (let i = 0; i < 3; i++) {
+      const bee = new THREE.Mesh(beeGeo, beeMat)
+      
+      // Random starting position
+      bee.position.set(
+        (Math.random() - 0.5) * 6,
+        0.5 + Math.random(), // Will give range of 0.5-1.5
+        (Math.random() - 0.5) * 6
+      )
+
+      // Store random movement direction
+      bee.userData.velocity = new THREE.Vector3(
+        (Math.random() - 0.5) * 0.5,
+        (Math.random() - 0.5) * 0.3,
+        (Math.random() - 0.5) * 0.5
+      )
+
+      this.bees.push(bee)
+      this.scene.add(bee)
+    }
+  }
+
   private setupInteraction() {
     const onMouseDown = (event: MouseEvent) => {
       this.mouseDown = true
@@ -643,13 +677,23 @@ export class ViewEngine extends EngineUtils {
     
     // Clean up grass instances
     if (this.grassInstances) {
-      this.grassInstances.geometry.dispose();
+      this.grassInstances.geometry.dispose()
       if (this.grassInstances.material instanceof THREE.Material) {
-        this.grassInstances.material.dispose();
+        this.grassInstances.material.dispose()
       }
-      this.scene.remove(this.grassInstances);
-      this.grassInstances = null;
+      this.scene.remove(this.grassInstances)
+      this.grassInstances = null
     }
+
+    // Clean up bees
+    this.bees.forEach(bee => {
+      bee.geometry.dispose()
+      if (bee.material instanceof THREE.Material) {
+        bee.material.dispose()
+      }
+      this.scene.remove(bee)
+    })
+    this.bees = []
     
     // Call parent dispose first
     super.dispose()
@@ -667,6 +711,31 @@ export class ViewEngine extends EngineUtils {
     this.controls?.update()
 
     try {
+      // Update bee positions
+      const deltaTime = 0.016 // Assume 60fps for simplicity
+      this.bees.forEach(bee => {
+        // Update position
+        bee.position.add(bee.userData.velocity.clone().multiplyScalar(deltaTime))
+        
+        // Bounce off bounds
+        const bounds = 4
+        if (bee.position.x < -bounds || bee.position.x > bounds) bee.userData.velocity.x *= -1
+        if (bee.position.y < 0.5 || bee.position.y > 1.5) bee.userData.velocity.y *= -1
+        if (bee.position.z < -bounds || bee.position.z > bounds) bee.userData.velocity.z *= -1
+
+        // Add small random movement
+        bee.userData.velocity.add(new THREE.Vector3(
+          (Math.random() - 0.5) * 0.003,
+          (Math.random() - 0.5) * 0.003,
+          (Math.random() - 0.5) * 0.003
+        ))
+
+        // Limit speed
+        if (bee.userData.velocity.length() > 3) {
+          bee.userData.velocity.normalize().multiplyScalar(3)
+        }
+      })
+
       // Re-render all active plants with their plot offsets
       if (this.activePlots && this.activePlots.size > 0) {
         // Clear only plant meshes at start of frame
