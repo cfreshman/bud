@@ -120,6 +120,98 @@ export class ViewEngine extends EngineUtils {
     ground.rotation.x = -Math.PI / 2
     ground.receiveShadow = true
     this.scene.add(ground)
+
+    // Add scattered dark patches
+    this.createDarkPatches()
+  }
+
+  private createDarkPatches() {
+    // Create seeded random number generator
+    let seed = 5678;
+    const seededRandom = () => {
+      seed = (seed * 16807) % 2147483647;
+      return (seed - 1) / 2147483646;
+    };
+
+    // Create a square geometry
+    const patchGeo = new THREE.PlaneGeometry(1, 1);
+    
+    // Create darker material
+    const patchMat = new THREE.MeshStandardMaterial({
+      color: '#786358',
+      side: THREE.DoubleSide,
+      roughness: 0.9,
+      metalness: 0.05,
+    });
+
+    // Create instanced mesh for patches
+    const patchCount = 100;
+    const patches = new THREE.InstancedMesh(patchGeo, patchMat, patchCount);
+    patches.receiveShadow = true;
+
+    // Get ground radius
+    const groundRadius = 5;
+    
+    // Matrix for transformations
+    const matrix = new THREE.Matrix4();
+    
+    let validInstanceCount = 0;
+    let attempts = 0;
+    const maxAttempts = patchCount * 2;
+
+    // Sample uniformly over x-y grid
+    while (validInstanceCount < patchCount && attempts < maxAttempts) {
+      const x = (seededRandom() * 2 - 1) * groundRadius;
+      const z = (seededRandom() * 2 - 1) * groundRadius;
+      
+      // Check if point is within ground circle
+      const distanceFromCenter = Math.sqrt(x * x + z * z);
+      if (distanceFromCenter > groundRadius) {
+        attempts++;
+        continue;
+      }
+
+      // Calculate base scale with power distribution
+      const baseScale = Math.pow(seededRandom(), 4) * 2.5;
+      
+      // Check if any corner of the square would be outside the circle
+      // The half-diagonal of the square is scale * sqrt(2)/2
+      const squareRadius = baseScale * 0.7071; // sqrt(2)/2 ≈ 0.7071
+      if (distanceFromCenter + squareRadius > groundRadius) {
+        attempts++;
+        continue;
+      }
+
+      // Higher probability towards center
+      const normalizedDist = distanceFromCenter / groundRadius;
+      const probability = Math.pow(1 - normalizedDist, 1.2) * 0.9;
+
+      if (seededRandom() < probability) {
+        // Position matrix
+        matrix.makeTranslation(x, 0.001, z);
+        
+        // Apply rotation around Y axis
+        const rotationY = seededRandom() * Math.PI * 2;
+        matrix.multiply(new THREE.Matrix4().makeRotationY(rotationY));
+        
+        // Lay flat by rotating around X
+        matrix.multiply(new THREE.Matrix4().makeRotationX(-Math.PI / 2));
+        
+        // Apply scale last
+        matrix.scale(new THREE.Vector3(baseScale, baseScale, 1));
+
+        // Apply to instance
+        patches.setMatrixAt(validInstanceCount, matrix);
+        validInstanceCount++;
+      }
+      
+      attempts++;
+    }
+
+    // Update instance count and add to scene
+    patches.count = validInstanceCount;
+    patches.instanceMatrix.needsUpdate = true;
+    this.scene.add(patches);
   }
 
   private createPlots() {
