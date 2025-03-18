@@ -19,6 +19,7 @@ export class ViewEngine extends EngineUtils {
   private grassRadius = 6 // How far out the grass extends
   private plotPositions: THREE.Vector3[] = [] // Store plot positions for grass distribution
   private bees: THREE.Mesh[] = [] // Store bee meshes
+  private lastCameraState: { position: THREE.Vector3, target: THREE.Vector3 } | null = null
 
   constructor(container: HTMLElement, onSelectPlot: (plotIndex: number | null) => void) {
     super(container)
@@ -27,10 +28,51 @@ export class ViewEngine extends EngineUtils {
     // Create sky and sun before anything else
     this.createSkyAndSun()
 
-    // Adjust camera for greenhouse view
-    this.camera.position.set(0, 8, 8)
-    this.controls.target.set(0, 0, 0)
+    // Load saved camera state or use default
+    const savedState = localStorage.getItem('greenhouse_camera_state')
+    if (savedState) {
+      const state = JSON.parse(savedState)
+      this.camera.position.set(state.position.x, state.position.y, state.position.z)
+      this.controls.target.set(state.target.x, state.target.y, state.target.z)
+    } else {
+      // Default camera position
+      this.camera.position.set(0, 8, 8)
+      this.controls.target.set(0, 0, 0)
+    }
     this.controls.update()
+
+    // Store initial camera state
+    this.lastCameraState = {
+      position: this.camera.position.clone(),
+      target: this.controls.target.clone()
+    }
+
+    // Add camera change listener
+    this.controls.addEventListener('change', () => {
+      // Only save if position actually changed
+      if (!this.lastCameraState?.position.equals(this.camera.position) ||
+          !this.lastCameraState?.target.equals(this.controls.target)) {
+        
+        this.lastCameraState = {
+          position: this.camera.position.clone(),
+          target: this.controls.target.clone()
+        }
+        
+        // Save to localStorage
+        localStorage.setItem('greenhouse_camera_state', JSON.stringify({
+          position: {
+            x: this.camera.position.x,
+            y: this.camera.position.y,
+            z: this.camera.position.z
+          },
+          target: {
+            x: this.controls.target.x,
+            y: this.controls.target.y,
+            z: this.controls.target.z
+          }
+        }))
+      }
+    })
 
     // Create ground
     this.createGround()
