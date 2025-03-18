@@ -107,6 +107,13 @@ export class ViewEngine extends EngineUtils {
   }
 
   private createGrass() {
+    // Create seeded random number generator
+    let seed = 1234; // Fixed seed
+    const seededRandom = () => {
+      seed = (seed * 16807) % 2147483647;
+      return (seed - 1) / 2147483646;
+    };
+
     // Create a vertical rectangle geometry for grass patches
     const grassGeo = new THREE.PlaneGeometry(0.06, 0.6);
     // Keep vertical but move pivot to bottom
@@ -171,21 +178,21 @@ export class ViewEngine extends EngineUtils {
       
       // Add random height variation (more variation near edges)
       const heightVariation = 0.05 + Math.pow(normalizedDist, 2) * 0.15;
-      const height = baseHeight + (Math.random() - 0.3) * heightVariation; // Bias towards taller
+      const height = baseHeight + (seededRandom() - 0.3) * heightVariation; // Use seeded random
 
       // Random rotation around Y for variety
-      const rotation = Math.random() * Math.PI * 2;
+      const rotation = seededRandom() * Math.PI * 2; // Use seeded random
       quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), rotation);
 
       // Add slight random tilt (more tilt near edges)
       const maxTilt = (distanceFromCenter / groundRadius) * 0.3;
       const tiltAxis = new THREE.Vector3(
-        (Math.random() - 0.5) * maxTilt,
+        (seededRandom() - 0.5) * maxTilt, // Use seeded random
         0,
-        (Math.random() - 0.5) * maxTilt
+        (seededRandom() - 0.5) * maxTilt  // Use seeded random
       ).normalize();
       const tiltQuaternion = new THREE.Quaternion();
-      tiltQuaternion.setFromAxisAngle(tiltAxis, Math.random() * maxTilt);
+      tiltQuaternion.setFromAxisAngle(tiltAxis, seededRandom() * maxTilt); // Use seeded random
       quaternion.multiply(tiltQuaternion);
 
       // Set position and scale
@@ -201,8 +208,8 @@ export class ViewEngine extends EngineUtils {
     // Sample uniformly over x-y grid
     while (validInstanceCount < this.grassCount && attempts < maxAttempts) {
       // Random position in square that bounds the circle
-      const x = (Math.random() * 2 - 1) * groundRadius;
-      const z = (Math.random() * 2 - 1) * groundRadius;
+      const x = (seededRandom() * 2 - 1) * groundRadius; // Use seeded random
+      const z = (seededRandom() * 2 - 1) * groundRadius; // Use seeded random
       
       // Check if point is within ground circle
       const distanceFromCenter = Math.sqrt(x * x + z * z);
@@ -224,7 +231,7 @@ export class ViewEngine extends EngineUtils {
       const potFactor = Math.min((minPlotDist - minPotDistance) / 2, 1);
       const probability = Math.pow(centerFactor * potFactor, 1.2);
 
-      if (Math.random() < probability) {
+      if (seededRandom() < probability) { // Use seeded random
         placeGrassPatch(x, z, distanceFromCenter);
       }
       
