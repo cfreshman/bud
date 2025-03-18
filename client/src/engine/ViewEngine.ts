@@ -23,8 +23,8 @@ export class ViewEngine extends EngineUtils {
     super(container)
     this.onSelectPlot = onSelectPlot
 
-    // this.scene.background = new THREE.Color('#ccccff')
-    this.scene.background = new THREE.Color('#88aa99')
+    // Create sky and sun before anything else
+    this.createSkyAndSun()
 
     // Adjust camera for greenhouse view
     this.camera.position.set(0, 8, 8)
@@ -42,6 +42,73 @@ export class ViewEngine extends EngineUtils {
     
     // Add plot selection interaction
     this.setupInteraction()
+  }
+
+  private createSkyAndSun() {
+    // Create sky dome
+    const skyGeo = new THREE.SphereGeometry(100, 32, 32);
+    const skyMat = new THREE.ShaderMaterial({
+      uniforms: {
+        topColor: { value: new THREE.Color('#bbddbb') },
+        bottomColor: { value: new THREE.Color('#88aa99') },
+        offset: { value: 20 },
+        exponent: { value: 0.6 }
+      },
+      vertexShader: `
+        varying vec3 vWorldPosition;
+        void main() {
+          vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+          vWorldPosition = worldPosition.xyz;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform vec3 topColor;
+        uniform vec3 bottomColor;
+        uniform float offset;
+        uniform float exponent;
+        varying vec3 vWorldPosition;
+        void main() {
+          float h = normalize(vWorldPosition + offset).y;
+          gl_FragColor = vec4(mix(bottomColor, topColor, max(pow(max(h, 0.0), exponent), 0.0)), 1.0);
+        }
+      `,
+      side: THREE.BackSide
+    });
+    const sky = new THREE.Mesh(skyGeo, skyMat);
+    this.scene.add(sky);
+
+    // Create sun
+    const sunGeo = new THREE.CircleGeometry(4, 32);
+    const sunMat = new THREE.ShaderMaterial({
+      uniforms: {
+        color: { value: new THREE.Color('#ffdd88') },
+        glowColor: { value: new THREE.Color('#ffaa44') }
+      },
+      vertexShader: `
+        varying vec3 vNormal;
+        void main() {
+          vNormal = normalize(normalMatrix * normal);
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform vec3 color;
+        uniform vec3 glowColor;
+        varying vec3 vNormal;
+        void main() {
+          float intensity = pow(0.7 - dot(vNormal, vec3(0.0, 0.0, 1.0)), 4.0);
+          gl_FragColor = vec4(mix(color, glowColor, intensity), 1.0);
+        }
+      `,
+      side: THREE.DoubleSide,
+      transparent: true,
+      blending: THREE.AdditiveBlending
+    });
+    const sun = new THREE.Mesh(sunGeo, sunMat);
+    sun.position.set(-30, 40, -60);
+    sun.lookAt(0, 0, 0);
+    this.scene.add(sun);
   }
 
   private createGround() {
