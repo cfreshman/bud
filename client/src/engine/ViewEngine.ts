@@ -208,7 +208,7 @@ export class ViewEngine extends EngineUtils {
     const potTopRadius = 0.6;
     const potBottomRadius = 0.4;
     const maxPotRadius = Math.max(potTopRadius, potBottomRadius);
-    const minPotDistance = maxPotRadius + 0.1; // Add small buffer for visual spacing
+    const minPotDistance = maxPotRadius + 0.4; // Increased buffer from 0.1 to 0.4 for more space around pots
 
     // Store plot positions and create matrix/quaternion
     const matrix = new THREE.Matrix4();
@@ -236,15 +236,15 @@ export class ViewEngine extends EngineUtils {
       if (!this.grassInstances) return;
       
       // Calculate base height based on distance from center
-      // Edge height is 0.6, center is 25% of that (0.15)
+      // Edge height is 0.8, center is 20% of that (0.16)
       // Use quadratic falloff for more gradual transition
-      const edgeHeight = 0.6;
-      const centerHeight = edgeHeight * 0.25;
+      const edgeHeight = 0.8;
+      const centerHeight = edgeHeight * 0.2;
       const normalizedDist = distanceFromCenter / groundRadius;
       const baseHeight = centerHeight + (edgeHeight - centerHeight) * Math.pow(normalizedDist, 2);
       
-      // Add random height variation (more variation near edges)
-      const heightVariation = 0.05 + Math.pow(normalizedDist, 2) * 0.15;
+      // Add more random height variation (more variation near edges)
+      const heightVariation = 0.1 + Math.pow(normalizedDist, 1.5) * 0.3;
       const height = baseHeight + (seededRandom() - 0.3) * heightVariation; // Use seeded random
 
       // Random rotation around Y for variety
@@ -295,8 +295,10 @@ export class ViewEngine extends EngineUtils {
       // Calculate probability based on distances
       // Higher probability further from center AND further from pots
       const centerFactor = Math.min(distanceFromCenter / groundRadius, 1);
-      const potFactor = Math.min((minPlotDist - minPotDistance) / 2, 1);
-      const probability = Math.pow(centerFactor * potFactor, 1.2);
+      const potFactor = Math.min((minPlotDist - minPotDistance) / 1.5, 1); // Reduced from 2 to 1.5 to spread out grass more gradually
+      const rawProbability = Math.pow(centerFactor * potFactor, 1.2);
+      // Scale probability to start at 0.33 once above zero
+      const probability = rawProbability > 0 ? 0.1 + (rawProbability * 0.9) : 0;
 
       if (seededRandom() < probability) { // Use seeded random
         placeGrassPatch(x, z, distanceFromCenter);
