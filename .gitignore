@@ -46,3 +46,6 @@ server/data/db/
 
 # Android build outputs
 client/public/android/bud.apk
+client/public/android/bud.aab
+client/dist/android/bud.apk
+client/dist/android/bud.aab

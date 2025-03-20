@@ -14,3 +14,10 @@ local.properties
 
 # Bundle artifacts
 *.jsbundle
+
+# Debug keystore (but keep release keystore)
+debug.keystore
+app/debug.keystore
+
+# Keep release keystore
+!app/release.keystore
