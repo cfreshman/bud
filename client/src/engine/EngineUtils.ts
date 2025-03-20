@@ -48,6 +48,10 @@ export class EngineUtils {
   protected lastTime?: number
   protected currentPartCount: number = 0
 
+  // Bounce animation state
+  protected bounceTime: number = 0
+  protected bounceOffsets = new Map<string, number>()
+
   constructor(container: HTMLElement) {
     this.domElement = container
     this.raycaster = new THREE.Raycaster()
@@ -172,6 +176,11 @@ export class EngineUtils {
     
     // Reset part count at start of frame
     this.currentPartCount = 0
+
+    // Update bounce time - use real time directly
+    if (!this.isEditor) {
+      this.bounceTime = performance.now() / 1000
+    }
 
     // Update wind if enabled
     if (this.isWindy) {
@@ -354,12 +363,50 @@ export class EngineUtils {
     // Clean up all meshes for this body's part hierarchy before rendering
     this.cleanupMeshesWithData(body.rootPartId, data)
 
+    // Create base world transform from body transform
     const worldTransform = new THREE.Matrix4().makeBasis(
       body.transform.right,
       body.transform.up, 
       body.transform.forward
     )
     worldTransform.setPosition(body.transform.position)
+
+    // Apply squash and stretch effect if not in editor
+    if (!this.isEditor) {
+      // Get or create bounce offset for this body
+      if (!this.bounceOffsets.has(bodyId)) {
+        this.bounceOffsets.set(bodyId, Math.random() * Math.PI * 2)
+      }
+      const offset = this.bounceOffsets.get(bodyId)!
+
+      const time = performance.now() / 1000
+      
+      // Calculate lean angle - ranges from -0.02 to 0.02 radians (about ±1.1 degrees)
+      const leanAngle = Math.sin(time + offset) * 0.02
+      
+      // Calculate height scale - inverse of lean to create squash effect
+      // When leaning, we squash slightly (0.98-1.02)
+      const heightScale = 1 - Math.abs(Math.sin(time + offset)) * 0.02
+      
+      // Get the plant's base position (already in worldTransform position)
+      const basePosition = new THREE.Vector3()
+      worldTransform.decompose(basePosition, new THREE.Quaternion(), new THREE.Vector3())
+      
+      // Create transform matrices
+      const rotateMatrix = new THREE.Matrix4().makeRotationZ(leanAngle)
+      const scaleMatrix = new THREE.Matrix4().makeScale(1, heightScale, 1)
+      
+      // Move to origin, apply transforms, move back to base
+      const toOrigin = new THREE.Matrix4().makeTranslation(-basePosition.x, -basePosition.y, -basePosition.z)
+      const fromOrigin = new THREE.Matrix4().makeTranslation(basePosition.x, basePosition.y, basePosition.z)
+      
+      // Apply transforms in order: move to origin, scale, rotate, move back
+      worldTransform
+        .premultiply(toOrigin)
+        .premultiply(scaleMatrix)
+        .premultiply(rotateMatrix)
+        .premultiply(fromOrigin)
+    }
     
     this.renderPartHierarchyWithData(body.rootPartId, worldTransform, data)
   }

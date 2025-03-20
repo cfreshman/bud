@@ -757,7 +757,7 @@ export class ViewEngine extends EngineUtils {
     try {
       // Update bee positions
       const deltaTime = 0.016 // Assume 60fps for simplicity
-      this.bees.forEach(bee => {
+      this.bees?.forEach(bee => {
         // Update position
         bee.position.add(bee.userData.velocity.clone().multiplyScalar(deltaTime))
         

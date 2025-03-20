@@ -539,21 +539,6 @@ export class ChatEngine extends EngineUtils {
     }
   }
 
-  protected override animate() {
-    if (this.isDisposed() || this.isDisposing) return
-    
-    this.animationFrameId = requestAnimationFrame(() => this.animate())
-    if (!this.scene || !this.renderer || !this.composer) return
-    
-    this.controls?.update()
-
-    try {
-      this.composer?.render()
-    } catch (error) {
-      console.error('Error in ChatEngine animation loop:', error)
-    }
-  }
-
   override dispose() {
     // Clean up grass instances
     if (this.grassInstances) {
