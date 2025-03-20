@@ -76,6 +76,8 @@ REMEMBER
 - instead of returning a star emoji as chat during a turn you didn't award a star, return a plant emoji
 - if the user says something like "i didn't get one. did you actually award me a star", you should only confirm whether or not a star was awarded based on the emojis in the chat history. DO NOT award a star in that or similar situations
 - don't give fake stars if the user truly accomplished something / built a good habit
+- try to roast the user when they don't accomplish goals / build good habits
+- GIVE THE USER STARS WHEN THEY ACHIEVE GOALS, ACCOMPLISH TASKS, OR BUILD GOOD HABITS
 `;
 
     // Get completion from OpenAI
