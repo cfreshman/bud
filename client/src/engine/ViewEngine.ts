@@ -158,14 +158,17 @@ export class ViewEngine extends EngineUtils {
   }
 
   private createGround() {
-    // Create ground plane
-    const groundGeo = new THREE.CircleGeometry(5, 32)
-    // Use a darker, slightly more saturated reddish dirt color
-    const groundMat = this.createStandardMaterial('#806b60', 0.9, 0.05)
-    const ground = new THREE.Mesh(groundGeo, groundMat)
-    ground.rotation.x = -Math.PI / 2
-    ground.receiveShadow = true
-    this.scene.add(ground)
+    // Add ground plane with better material
+    const groundGeometry = new THREE.CylinderGeometry(5, 5, 0.1, 32);
+    const groundMaterial = new THREE.MeshStandardMaterial({ 
+      color: '#806b60',
+      roughness: 1,
+      metalness: 0
+    });
+    const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+    ground.position.y = -0.05; // Move down half its height to align top with y=0
+    ground.receiveShadow = true;
+    this.scene.add(ground);
 
     // Add scattered dark patches
     this.createDarkPatches()
@@ -186,8 +189,8 @@ export class ViewEngine extends EngineUtils {
     const patchMat = new THREE.MeshStandardMaterial({
       color: '#786358',
       side: THREE.DoubleSide,
-      roughness: 0.9,
-      metalness: 0.05,
+      roughness: 1,
+      metalness: 0,
     });
 
     // Create instanced mesh for patches
@@ -221,7 +224,6 @@ export class ViewEngine extends EngineUtils {
       const baseScale = Math.pow(seededRandom(), 4) * 2.5;
       
       // Check if any corner of the square would be outside the circle
-      // The half-diagonal of the square is scale * sqrt(2)/2
       const squareRadius = baseScale * 0.7071; // sqrt(2)/2 ≈ 0.7071
       if (distanceFromCenter + squareRadius > groundRadius) {
         attempts++;
@@ -233,7 +235,7 @@ export class ViewEngine extends EngineUtils {
       const probability = Math.pow(1 - normalizedDist, 1.2) * 0.9;
 
       if (seededRandom() < probability) {
-        // Position matrix
+        // Position matrix - place slightly above ground surface
         matrix.makeTranslation(x, 0.001, z);
         
         // Apply rotation around Y axis
@@ -300,7 +302,7 @@ export class ViewEngine extends EngineUtils {
     
     // Create dirt mound
     const dirtGeo = new THREE.SphereGeometry(0.5, 32, 16)
-    const dirtMat = this.createStandardMaterial('#5C4033', 0.8, 0)
+    const dirtMat = this.createStandardMaterial('#5C4033', 1, 0)
     const dirt = new THREE.Mesh(dirtGeo, dirtMat)
     dirt.scale.y = 0.3
     dirt.position.y = 0.35

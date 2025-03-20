@@ -849,7 +849,8 @@ export class EngineUtils {
     return new THREE.MeshStandardMaterial({
       color,
       roughness,
-      metalness
+      metalness,
+      side: THREE.DoubleSide
     })
   }
 
