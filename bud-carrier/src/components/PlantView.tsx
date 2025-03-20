@@ -546,7 +546,7 @@ const styles = StyleSheet.create({
   },
   chatContent: {
     width: '100%',
-    paddingBottom: Platform.OS === 'ios' ? 8 : 4,
+    paddingBottom: Platform.OS === 'ios' ? 0 : 4,
   },
   inputContainer: {
     marginHorizontal: 10,
