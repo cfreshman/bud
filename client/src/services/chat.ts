@@ -61,4 +61,72 @@ export async function clearChatHistory(plotIndex: number): Promise<void> {
     throw new Error(error.message || 'failed to clear chat history');
   }
   console.log('API: Chat history cleared successfully');
+}
+
+export async function getGoals(): Promise<string[]> {
+  console.log('API: Getting goals');
+  const token = getToken();
+  if (!token) throw new Error('not authenticated');
+
+  const response = await fetch(`${API_URL}/plants/goals`, {
+    method: 'GET',
+    headers: {
+      'Authorization': `Bearer ${token}`
+    }
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.message || 'failed to get goals');
+  }
+
+  const goals = await response.json();
+  console.log('API: Got goals:', goals);
+  return goals;
+}
+
+export async function setGoal(content: string): Promise<string[]> {
+  console.log('API: Setting goal:', content);
+  const token = getToken();
+  if (!token) throw new Error('not authenticated');
+
+  const response = await fetch(`${API_URL}/plants/goals`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    },
+    body: JSON.stringify({ content })
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.message || 'failed to set goal');
+  }
+
+  const goals = await response.json();
+  console.log('API: Goal set successfully');
+  return goals;
+}
+
+export async function unsetGoal(index: number): Promise<string[]> {
+  console.log('API: Removing goal at index:', index);
+  const token = getToken();
+  if (!token) throw new Error('not authenticated');
+
+  const response = await fetch(`${API_URL}/plants/goals/${index}`, {
+    method: 'DELETE',
+    headers: {
+      'Authorization': `Bearer ${token}`
+    }
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.message || 'failed to remove goal');
+  }
+
+  const goals = await response.json();
+  console.log('API: Goal removed successfully');
+  return goals;
 } 

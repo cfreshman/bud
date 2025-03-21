@@ -16,7 +16,7 @@
       "**/*"
     ],
     "ios": {
-      "supportsTablet": true,
+      "supportsTablet": false,
       "bundleIdentifier": "dev.freshman.bud",
       "buildNumber": "1",
       "jsEngine": "jsc",

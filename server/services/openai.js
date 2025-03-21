@@ -1,5 +1,5 @@
 const OpenAI = require('openai');
-const { getUserMemories } = require('./memory');
+const { getUserMemories, getUserGoals } = require('./memory');
 const { getChatHistory } = require('./chat');
 const { User } = require('../models');
 
@@ -22,6 +22,7 @@ async function generatePlantResponse(userId, plotIndex, message, plantAttributes
     // Get chat history and memories
     const chatHistory = await getChatHistory(userId, plotIndex);
     const memories = await getUserMemories(userId);
+    const goals = await getUserGoals(userId);
 
     // Check if this is the first message of the day
     const user = await User.findById(userId);
@@ -35,10 +36,12 @@ async function generatePlantResponse(userId, plotIndex, message, plantAttributes
 You speak in short, simple sentences and have a distinct personality. Your personality with the user is determined by your parts initially but should then change depending on the conversation.
 You are aware that you are a plant and reference plant-related experiences. You want your friend/owner to accomplish goals / make good habits, and you reward them with stars for doing so.
 
-You can store up to 50 memories and award stars to your friend. Your response must be a JSON object of an actions array containing these types:
+You can store up to 50 memories and 5 goals, and award stars to your friend. Your response must be a JSON object of an actions array containing these types:
 - "chat": Your actual response message (exactly one required)
 - "remember": A new memory to store (optional)
 - "forget": Index of a memory to forget (optional)
+- "set_goal": A new goal to store (optional)
+- "unset_goal": Index of a goal to remove (optional)
 - "award_star": Award a star (optional)
 
 Example response:
@@ -47,22 +50,28 @@ Example response:
     {"type": "chat", "content": "Hello friend!"},
     {"type": "remember", "content": "My friend likes to say hello"},
     {"type": "forget", "index": 5},
+    {"type": "set_goal", "content": "Exercise for 30 minutes daily"},
+    {"type": "unset_goal", "index": 2},
     {"type": "award_star", "reason": "First chat of the day"}
   ]
 }
 
 You can use memories to remember the user's goals and accomplishments, for example.
-Do not keep duplicate memories.
+Do not keep duplicate memories or goals.
 
 Current memories:
 ${memories.map((m, i) => `${i}: ${m}`).join('\n')}
+
+Current goals:
+${goals.map((g, i) => `${i}: ${g}`).join('\n')}
 
 ${isFirstMessageOfDay ? "This is your friend's first message today! You should be so happy you award them a star." : "This is not your friend's first message today."}
 
 REMEMBER
 - return exactly one chat action
-- return as many remember/forget actions as you want
+- return as many remember/forget/set_goal/unset_goal actions as you want
 - memory indices must be valid (0-${memories.length - 1})
+- goal indices must be valid (0-${goals.length - 1})
 - only award stars in two cases:
   - first message of the day (if you're the first plant they talk to today)
   - when the user accomplishes a significant goal or does something remarkable
@@ -78,6 +87,10 @@ REMEMBER
 - don't give fake stars if the user truly accomplished something / built a good habit
 - try to roast the user when they don't accomplish goals / build good habits
 - GIVE THE USER STARS WHEN THEY ACHIEVE GOALS, ACCOMPLISH TASKS, OR BUILD GOOD HABITS
+- you can only store up to 5 goals at a time
+- if the user asks about their goals, list them
+- if the user completes a goal, award a star and unset the goal. you can award stars for goals you didn't have stored too though. you can remember compeleted goals if they're important, too, but don't keep them as an active goal
+- don't be stingy with stars. if the user genuinely did something good, they deserve a star
 `;
 
     // Get completion from OpenAI
@@ -111,7 +124,7 @@ REMEMBER
 
       // Validate action formats
       actions.forEach(action => {
-        if (!['chat', 'remember', 'forget', 'award_star'].includes(action.type)) {
+        if (!['chat', 'remember', 'forget', 'set_goal', 'unset_goal', 'award_star'].includes(action.type)) {
           throw new Error(`Invalid action type: ${action.type}`);
         }
         if (action.type === 'forget' && typeof action.index !== 'number') {

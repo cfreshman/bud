@@ -122,6 +122,11 @@ const memorySchema = new mongoose.Schema({
     type: [String],
     default: [],
     validate: [arr => arr.length <= 50, 'Memory array cannot exceed 50 items']
+  },
+  goals: {
+    type: [String],
+    default: [],
+    validate: [arr => arr.length <= 5, 'Goals array cannot exceed 5 items']
   }
 })
 

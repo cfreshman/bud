@@ -4,7 +4,7 @@ const auth = require('../middleware/auth')
 const { Plant, ChatHistory, Memory, User } = require('../models')
 const { generatePlantResponse } = require('../services/openai')
 const { notifyPlantCarryUpdate, notifyWebClientUpdate } = require('../services/websocket')
-const { processChatResponse } = require('../services/memory')
+const { processChatResponse, getUserGoals, setGoal, unsetGoal } = require('../services/memory')
 
 // Get all plants for user
 router.get('/', auth, async (req, res) => {
@@ -471,6 +471,59 @@ router.get('/stars', auth, async (req, res) => {
   } catch (error) {
     console.error('Failed to get star counts:', error)
     res.status(500).json({ message: 'error getting star counts' })
+  }
+})
+
+// Get goals for user
+router.get('/goals', auth, async (req, res) => {
+  try {
+    const goals = await getUserGoals(req.user.userId)
+    res.json(goals)
+  } catch (error) {
+    console.error('Failed to get goals:', error)
+    res.status(500).json({ message: 'error loading goals' })
+  }
+})
+
+// Set a new goal
+router.post('/goals', auth, async (req, res) => {
+  try {
+    const { content } = req.body
+    if (!content) {
+      return res.status(400).json({ message: 'goal content required' })
+    }
+    
+    const success = await setGoal(req.user.userId, content)
+    if (!success) {
+      return res.status(400).json({ message: 'maximum goals reached (5)' })
+    }
+    
+    const goals = await getUserGoals(req.user.userId)
+    res.json(goals)
+  } catch (error) {
+    console.error('Failed to set goal:', error)
+    res.status(500).json({ message: 'error setting goal' })
+  }
+})
+
+// Remove a goal
+router.delete('/goals/:index', auth, async (req, res) => {
+  try {
+    const index = parseInt(req.params.index)
+    if (isNaN(index)) {
+      return res.status(400).json({ message: 'invalid goal index' })
+    }
+    
+    const success = await unsetGoal(req.user.userId, index)
+    if (!success) {
+      return res.status(400).json({ message: 'invalid goal index' })
+    }
+    
+    const goals = await getUserGoals(req.user.userId)
+    res.json(goals)
+  } catch (error) {
+    console.error('Failed to remove goal:', error)
+    res.status(500).json({ message: 'error removing goal' })
   }
 })
 
