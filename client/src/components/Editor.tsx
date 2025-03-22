@@ -314,7 +314,7 @@ export function Editor({ plantData, plotIndex, onSave, onCancel, onDelete }: Edi
         </button>
         <div className="star-count">
           <Star weight="fill" />
-          {displayStars.currentStars}/{displayStars.totalStars}
+          {displayStars.currentStars}
         </div>
         <button 
           className="control-button save" 
