@@ -27,6 +27,7 @@ function App() {
   const [sharedBudClaimed, setSharedBudClaimed] = useState(false)
   const viewEngineRef = useRef<ViewEngine | null>(null)
   const [isMobile, setIsMobile] = useState(false)
+  const [isViewingPlots, setIsViewingPlots] = useState(false)
   const [username, setUsername] = useState('')
   const [receivedPlot, setReceivedPlot] = useState<number | null>(null)
 
@@ -199,11 +200,23 @@ function App() {
   }, []);
 
   const handleSelectPlot = (plotIndex: number) => {
+    // On mobile, only allow selecting plots that have plants for gifting
+    if (isMobile && !plants.has(plotIndex)) {
+      return
+    }
+    
     if (plotIndex === receivedPlot) {
       setReceivedPlot(null)
     }
+    
     // Get plant data from plants Map
     const plantData = plants.get(plotIndex)
+    
+    // On mobile, don't enter edit mode
+    if (isMobile) {
+      setSelectedPlot(plotIndex)
+      return
+    }
     
     console.log('Selecting plot:', plotIndex, plantData ? {
       parts: plantData.parts.size,
@@ -321,6 +334,17 @@ function App() {
     }
   };
 
+  // Add handler for viewing plots on mobile
+  const handleViewPlots = () => {
+    setIsViewingPlots(true)
+  }
+
+  // Add handler for going back from plots view
+  const handleBackFromPlots = () => {
+    setIsViewingPlots(false)
+    setSelectedPlot(null)
+  }
+
   if (isMobile) {
     if (isAuthChecking || isLoading) {
       return <LoadingScreen />;
@@ -328,12 +352,36 @@ function App() {
     if (!isAuthenticated) {
       return <LoginView onLogin={handleLogin} />;
     }
+    if (isViewingPlots) {
+      return (
+        <div className="app">
+          <div className="download-buttons" style={{ position: 'fixed', top: 20, left: 20, zIndex: 1000 }}>
+            <button 
+              className="download-button"
+              onClick={handleBackFromPlots}
+            >
+              back
+            </button>
+          </div>
+          <Greenhouse 
+            plants={plants}
+            onSelectPlot={handleSelectPlot}
+            onStartChat={() => {}}
+            onLogout={() => {}}
+            onPlantsChange={setPlants}
+            receivedPlot={receivedPlot}
+            isMobileView={true}
+          />
+        </div>
+      );
+    }
     return <MobileView 
       sharedBudClaimed={sharedBudClaimed} 
       onLogout={handleLogout}
       username={username}
       receivedPlot={receivedPlot}
       onCarryBud={handleCarryBud}
+      onViewPlots={handleViewPlots}
     />;
   }
 
@@ -350,6 +398,7 @@ function App() {
           username={username}
           receivedPlot={receivedPlot}
           onCarryBud={handleCarryBud}
+          onViewPlots={handleViewPlots}
         />
       ) : isEditing ? (
         <Editor 
@@ -373,6 +422,7 @@ function App() {
           onLogout={handleLogout}
           onPlantsChange={setPlants}
           receivedPlot={receivedPlot}
+          isMobileView={isMobile}
         />
       )}
     </div>

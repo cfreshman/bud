@@ -15,8 +15,16 @@ interface GreenhouseProps {
   onSelectPlot: (plotIndex: number) => void
   onStartChat: (plotIndex: number) => void
   onLogout: () => void
-  onPlantsChange?: (plants: Map<number, PlantData>) => void
+  onPlantsChange: (plants: Map<number, PlantData>) => void
   receivedPlot: number | null
+  isMobileView?: boolean
+}
+
+interface MenuState {
+  position: { x: number; y: number };
+  plotIndex: number;
+  isLinkCopied?: boolean;
+  options: string[];
 }
 
 export function Greenhouse({ 
@@ -25,12 +33,13 @@ export function Greenhouse({
   onStartChat, 
   onLogout, 
   onPlantsChange,
-  receivedPlot 
+  receivedPlot,
+  isMobileView
 }: GreenhouseProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const engineRef = useRef<ViewEngine | null>(null)
   const cleanupRef = useRef(false)
-  const [menuState, setMenuState] = useState<{ position: { x: number, y: number }, plotIndex: number, isLinkCopied?: boolean } | null>(null)
+  const [menuState, setMenuState] = useState<MenuState | null>(null)
   const [chatState, setChatState] = useState<{ plant: PlantData } | null>(null)
   const [carriedPlotIndex, setCarriedPlotIndex] = useState<number | null>(null)
   const [stars, setStars] = useState<StarCounts>({ totalStars: 0, currentStars: 0 })
@@ -79,18 +88,38 @@ export function Greenhouse({
       return
     }
 
-    // If plot is empty, go directly to edit mode
-    if (!plants.has(plotIndex)) {
+    // On mobile, only allow selecting plots with plants
+    if (isMobileView && !plants.has(plotIndex)) {
+      return
+    }
+
+    // If plot is empty and not on mobile, go directly to edit mode
+    if (!plants.has(plotIndex) && !isMobileView) {
       onSelectPlotRef.current(plotIndex)
       return
     }
 
-    // Otherwise show menu for populated plots
+    // Otherwise show menu
     const position = engineRef.current?.getPlotScreenPosition(plotIndex)
     if (!position) return
 
-    setMenuState({ position, plotIndex })
-  }, [plants])
+    // On mobile, only show gift option for plots with plants
+    if (isMobileView) {
+      setMenuState({
+        position,
+        plotIndex,
+        options: ['gift']
+      })
+      return
+    }
+
+    // Desktop menu
+    setMenuState({
+      position,
+      plotIndex,
+      options: plants.has(plotIndex) ? ['edit', 'chat', 'gift', 'delete'] : ['edit']
+    })
+  }, [plants, isMobileView])
 
   // Initialize or reinitialize the ViewEngine
   const initializeEngine = useCallback(() => {
@@ -268,36 +297,38 @@ export function Greenhouse({
 
   return (
     <>
-      <div style={{ 
-        position: 'fixed', 
-        top: '20px', 
-        left: '20px', 
-        zIndex: 1000,
-        display: 'flex',
-        gap: '12px',
-        alignItems: 'center'
-      }}>
-        <button className="chat-button" onClick={onLogout}>
-          logout
-        </button>
-        <div className="chat-button" style={{ cursor: 'default', border: '1px solid transparent', backgroundClip: 'padding-box' }}>
-          <Star weight="fill" style={{ marginRight: '4px' }} />
-          {stars.currentStars}
-        </div>
-        {receivedPlot !== null && (
-          <button 
-            className="chat-button" 
-            onClick={() => onStartChat(receivedPlot)}
-            style={{ 
-              background: '#fdfdfd',
-              color: '#000000',
-              border: '1px solid #000000'
-            }}
-          >
-            you received a plant!
+      {!isMobileView && (
+        <div style={{ 
+          position: 'fixed', 
+          top: '20px', 
+          left: '20px', 
+          zIndex: 1000,
+          display: 'flex',
+          gap: '12px',
+          alignItems: 'center'
+        }}>
+          <button className="chat-button" onClick={onLogout}>
+            logout
           </button>
-        )}
-      </div>
+          <div className="chat-button" style={{ cursor: 'default', border: '1px solid transparent', backgroundClip: 'padding-box' }}>
+            <Star weight="fill" style={{ marginRight: '4px' }} />
+            {stars.currentStars}
+          </div>
+          {receivedPlot !== null && (
+            <button 
+              className="chat-button" 
+              onClick={() => onStartChat(receivedPlot)}
+              style={{ 
+                background: '#fdfdfd',
+                color: '#000000',
+                border: '1px solid #000000'
+              }}
+            >
+              you received a plant!
+            </button>
+          )}
+        </div>
+      )}
       <div style={{ position: 'relative', width: '100%', height: '100%' }}>
         <div 
           ref={containerRef} 
@@ -314,6 +345,7 @@ export function Greenhouse({
               isCarried={carriedPlotIndex === menuState.plotIndex}
               shareId={plants.get(menuState.plotIndex)?.shareId}
               isLinkCopied={menuState.isLinkCopied}
+              isMobileView={isMobileView}
               onSelect={(action) => {
                 if (action === 'edit') {
                   onSelectPlotRef.current(menuState.plotIndex)

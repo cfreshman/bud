@@ -6,9 +6,10 @@ interface MobileViewProps {
   username: string;
   receivedPlot?: number | null;
   onCarryBud?: (plotIndex: number) => void;
+  onViewPlots: () => void;
 }
 
-export function MobileView({ sharedBudClaimed, onLogout, username, receivedPlot, onCarryBud }: MobileViewProps) {
+export function MobileView({ sharedBudClaimed, onLogout, username, receivedPlot, onCarryBud, onViewPlots }: MobileViewProps) {
   return (
     <div className="mobile-view">
       <div className="circle" />
@@ -37,10 +38,16 @@ export function MobileView({ sharedBudClaimed, onLogout, username, receivedPlot,
 
         <div className="mobile-message">
           <p>looking to manage your buds?</p>
-          <p>open this page on desktop!</p>
-          <p>gift links do work here but managing your buds requires a mouse</p>
+          <p>you can view and gift your buds here</p>
+          <p>editing requires desktop</p>
         </div>
         <div className="download-buttons">
+          <button 
+            className="download-button"
+            onClick={onViewPlots}
+          >
+            view plots
+          </button>
           <button 
             className="download-button"
             onClick={onLogout}
