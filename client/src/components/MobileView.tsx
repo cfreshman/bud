@@ -4,18 +4,35 @@ interface MobileViewProps {
   sharedBudClaimed?: boolean;
   onLogout: () => void;
   username: string;
+  receivedPlot?: number | null;
+  onCarryBud?: (plotIndex: number) => void;
 }
 
-export function MobileView({ sharedBudClaimed, onLogout, username }: MobileViewProps) {
+export function MobileView({ sharedBudClaimed, onLogout, username, receivedPlot, onCarryBud }: MobileViewProps) {
   return (
     <div className="mobile-view">
       <div className="circle" />
 
       <div className="mobile-content" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
         {sharedBudClaimed && (
-          <div className="mobile-message">
-            <p>you claimed a bud!</p>
-          </div>
+          <>
+            <div className="mobile-message">
+              <p>you claimed a bud!</p>
+              {receivedPlot !== undefined && receivedPlot !== null && onCarryBud && (
+                <p>take it with you in the bud carrier app</p>
+              )}
+            </div>
+            {receivedPlot !== undefined && receivedPlot !== null && onCarryBud && (
+              <div className="download-buttons">
+                <button 
+                  className="download-button"
+                  onClick={() => onCarryBud(receivedPlot)}
+                >
+                  add to bud carrier 🌱
+                </button>
+              </div>
+            )}
+          </>
         )}
 
         <div className="mobile-message">

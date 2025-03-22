@@ -9,6 +9,7 @@ import { serializePlantData, deserializePlantData } from './utils/plantSaveUtils
 import { deleteMessagesForPlot } from './utils/chatStorage'
 import { isLoggedIn, getToken } from './services/auth'
 import { loadPlants, savePlant, deletePlant } from './services/plants'
+import { carryPlant } from './services/api'
 import { LoadingScreen } from './components/LoadingScreen'
 import { MobileView } from './components/MobileView'
 import { API_URL } from './config'
@@ -90,6 +91,7 @@ function App() {
             setReceivedPlot(data.plotIndex)
           } else {
             setSharedBudClaimed(true)
+            setReceivedPlot(data.plotIndex)
           }
 
           // Remove share ID from URL
@@ -305,6 +307,20 @@ function App() {
     localStorage.setItem('username', newUsername)
   }
 
+  // Add handler for carrying a bud
+  const handleCarryBud = async (plotIndex: number) => {
+    try {
+      await carryPlant(plotIndex.toString());
+      // Clear the received plot since it's now carried
+      setReceivedPlot(null);
+      // Update plants to reflect the new carried status
+      const updatedPlants = await loadPlants();
+      setPlants(updatedPlants);
+    } catch (error) {
+      console.error('Failed to carry bud:', error);
+    }
+  };
+
   if (isMobile) {
     if (isAuthChecking || isLoading) {
       return <LoadingScreen />;
@@ -316,6 +332,8 @@ function App() {
       sharedBudClaimed={sharedBudClaimed} 
       onLogout={handleLogout}
       username={username}
+      receivedPlot={receivedPlot}
+      onCarryBud={handleCarryBud}
     />;
   }
 
@@ -330,6 +348,8 @@ function App() {
           sharedBudClaimed={sharedBudClaimed} 
           onLogout={handleLogout}
           username={username}
+          receivedPlot={receivedPlot}
+          onCarryBud={handleCarryBud}
         />
       ) : isEditing ? (
         <Editor 
