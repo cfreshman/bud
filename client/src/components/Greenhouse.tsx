@@ -8,7 +8,7 @@ import { removeToken, getToken } from '../services/auth'
 import { carryPlant, uncarryPlant, sharePlant, unsharePlant, getStarCounts, StarCounts } from '../services/api'
 import { loadPlants } from '../services/plants'
 import { WS_URL } from '../config'
-import { Star } from '@phosphor-icons/react'
+import { Star, CaretLeft } from '@phosphor-icons/react'
 
 interface GreenhouseProps {
   plants: Map<number, PlantData>
@@ -43,6 +43,7 @@ export function Greenhouse({
   const [chatState, setChatState] = useState<{ plant: PlantData } | null>(null)
   const [carriedPlotIndex, setCarriedPlotIndex] = useState<number | null>(null)
   const [stars, setStars] = useState<StarCounts>({ totalStars: 0, currentStars: 0 })
+  const [showDownloadMenu, setShowDownloadMenu] = useState(false)
   
   // Store callback in ref to avoid effect dependency
   const onSelectPlotRef = useRef(onSelectPlot)
@@ -314,6 +315,44 @@ export function Greenhouse({
             <Star weight="fill" style={{ marginRight: '4px' }} />
             {stars.currentStars}
           </div>
+          {carriedPlotIndex === null && (
+            <>
+              {showDownloadMenu ? (
+                <>
+                  <button 
+                    className="chat-button"
+                    onClick={() => setShowDownloadMenu(false)}
+                    style={{ padding: '0 8px' }}
+                  >
+                    <CaretLeft weight="bold" />
+                  </button>
+                  <a 
+                    href="https://testflight.apple.com/join/ChMubZNX"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="chat-button"
+                  >
+                    bud 🌱 iOS
+                  </a>
+                  <a 
+                    href="/android/bud.apk"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="chat-button"
+                  >
+                    bud 🌱 Android
+                  </a>
+                </>
+              ) : (
+                <button 
+                  className="chat-button"
+                  onClick={() => setShowDownloadMenu(true)}
+                >
+                  download bud carrier 🌱
+                </button>
+              )}
+            </>
+          )}
           {receivedPlot !== null && (
             <button 
               className="chat-button" 
