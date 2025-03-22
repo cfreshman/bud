@@ -2005,54 +2005,152 @@ export class BudEngine extends EngineUtils {
       return
     }
 
-    // Create position on the front rim of the pot
-    const potPosition = this.mainPot.position.clone()
-    const potRadius = 0.6 // Matches the cylinder geometry radius from setupPotAndDirt
-    const rimHeight = potPosition.y + 0.4 // Pot height from setupPotAndDirt
-    const newPosition = potPosition.clone()
-    newPosition.z += potRadius // Move to front of pot
-    newPosition.y = rimHeight // Place at rim height
+    // If it's a root part, place in front of pot
+    if (!sourcePart.parentBoneId) {
+      // Create position on the front rim of the pot
+      const potPosition = this.mainPot.position.clone()
+      const potRadius = 0.6 // Matches the cylinder geometry radius from setupPotAndDirt
+      const rimHeight = potPosition.y + 0.4 // Pot height from setupPotAndDirt
+      const newPosition = potPosition.clone()
+      newPosition.z += potRadius // Move to front of pot
+      newPosition.y = rimHeight // Place at rim height
 
-    // Clone the entire hierarchy
-    const newPartId = this.clonePartHierarchy(boneId)
-    if (!newPartId) {
-      console.error('BudEngine: Failed to clone part hierarchy')
-      return
-    }
+      // Clone and place the part
+      const newPartId = this.clonePartHierarchy(boneId)
+      if (!newPartId) {
+        console.error('BudEngine: Failed to clone part hierarchy')
+        return
+      }
 
-    // Add to roots since it's a new independent part
-    this.roots.add(newPartId)
+      // Add to roots and create body
+      this.roots.add(newPartId)
+      const body = this.createBodyForPart(newPartId)
+      if (body) {
+        body.transform.position.copy(newPosition)
+        this.renderBody(body.id)
+        this.selectNewPart(newPartId, sourcePart, body.transform.position)
+      }
+    } else {
+      // For non-root parts, create clones in sequence
+      const parentBone = this.bones.get(sourcePart.parentBoneId)
+      if (!parentBone) return
 
-    // Create body for new part
-    const body = this.createBodyForPart(newPartId)
-    if (body) {
-      // Set the body position
-      body.transform.position.copy(newPosition)
-      
-      this.renderBody(body.id)
+      // Get parent part and its world transform
+      const parentPart = this.parts.get(parentBone.partId)
+      if (!parentPart) return
 
-      // Select the first bone of the new part
-      const newPart = this.parts.get(newPartId)
-      if (newPart && newPart.boneIds.length > 0) {
-        const newBoneId = newPart.boneIds[0]
-        const newBone = this.bones.get(newBoneId)
-        if (newBone) {
-          this.notifySelect({
-            id: newBoneId,
-            type: sourcePart.type,
-            position: newPosition.toArray(),
-            color: sourcePart.attributes.color,
-            length: newBone.length,
-            width: newBone.width,
-            theta: Math.asin(newBone.direction.x) * 180 / Math.PI,
-            phi: Math.asin(newBone.direction.z / Math.cos(Math.asin(newBone.direction.x))) * 180 / Math.PI,
-            twist: newBone.twist * 180 / Math.PI
-          })
+      // Get attachment data for the source part
+      const attachment = parentBone.children.get(sourcePart.id)
+      if (!attachment) return
+
+      // Get all existing attachments at the same ratio and their part IDs
+      const existingParts: Array<{partId: string, offset: number}> = []
+      const baseAngle = attachment.angle
+      const RATIO_TOLERANCE = 0.01
+      const ANGLE_TOLERANCE = 0.1 // About 5.7 degrees
+
+      // First pass: Find parts at similar ratios and angles
+      for (const [childPartId, childAttachment] of parentBone.children.entries()) {
+        // Check both ratio and angle similarity
+        if (Math.abs(childAttachment.ratio - attachment.ratio) < RATIO_TOLERANCE) {
+          // Calculate offset from base angle and normalize to -π to π range
+          let offset = childAttachment.angle - baseAngle
+          offset = ((offset + Math.PI) % (2 * Math.PI)) - Math.PI
+
+          // Check if this angle is unique (not within tolerance of existing angles)
+          const isUniqueAngle = existingParts.every(existing => 
+            Math.abs(existing.offset - offset) > ANGLE_TOLERANCE
+          )
+
+          if (isUniqueAngle || existingParts.length === 0) {
+            existingParts.push({ partId: childPartId, offset })
+          }
         }
       }
 
-      // Fit camera to include the cloned part
-      this.fitCameraToPlant()
+      let targetOffsets: number[] = []
+      const existingCount = existingParts.length
+
+      // Determine target pattern based on count
+      if (existingCount === 1) {
+        // Going to 2 parts (180° apart)
+        targetOffsets = [0, Math.PI]
+      } else if (existingCount === 2) {
+        // Going to 3 parts (120° apart)
+        targetOffsets = [0, 2 * Math.PI / 3, 4 * Math.PI / 3]
+      } else if (existingCount === 3) {
+        // Going to 4 parts (90° apart)
+        targetOffsets = [0, Math.PI / 2, Math.PI, 3 * Math.PI / 2]
+      } else if (existingCount === 4) {
+        // Going to 5 parts (72° apart)
+        targetOffsets = Array.from({length: 5}, (_, i) => i * 2 * Math.PI / 5)
+      } else if (existingCount === 5) {
+        // Going to 6 parts (60° apart)
+        targetOffsets = Array.from({length: 6}, (_, i) => i * 2 * Math.PI / 6)
+      }
+
+      if (targetOffsets.length > 0) {
+        // Sort existing parts by their current offset
+        existingParts.sort((a, b) => a.offset - b.offset)
+
+        // Update positions of existing parts
+        for (let i = 0; i < existingParts.length; i++) {
+          const part = existingParts[i]
+          parentBone.children.set(part.partId, {
+            ...attachment,
+            angle: baseAngle + targetOffsets[i]
+          })
+        }
+
+        // Create one new part at the next available position if needed
+        if (targetOffsets.length > existingParts.length) {
+          const newPartId = this.clonePartHierarchy(boneId, sourcePart.parentBoneId)
+          if (newPartId) {
+            parentBone.children.set(newPartId, {
+              ...attachment,
+              angle: baseAngle + targetOffsets[existingParts.length]
+            })
+          }
+        }
+
+        // Find root part and render its body
+        let rootPart = parentPart
+        while (rootPart.parentBoneId) {
+          const parentBone = this.bones.get(rootPart.parentBoneId)
+          if (!parentBone) break
+          const nextPart = this.parts.get(parentBone.partId)
+          if (!nextPart) break
+          rootPart = nextPart
+        }
+
+        if (rootPart && rootPart.id) {
+          this.renderBody(rootPart.id)
+        }
+      }
+    }
+
+    // Fit camera to include all cloned parts
+    this.fitCameraToPlant()
+  }
+
+  private selectNewPart(newPartId: string, sourcePart: Part, position: THREE.Vector3) {
+    const newPart = this.parts.get(newPartId)
+    if (newPart && newPart.boneIds.length > 0) {
+      const newBoneId = newPart.boneIds[0]
+      const newBone = this.bones.get(newBoneId)
+      if (newBone) {
+        this.notifySelect({
+          id: newBoneId,
+          type: sourcePart.type,
+          position: position.toArray(),
+          color: sourcePart.attributes.color,
+          length: newBone.length,
+          width: newBone.width,
+          theta: Math.asin(newBone.direction.x) * 180 / Math.PI,
+          phi: Math.asin(newBone.direction.z / Math.cos(Math.asin(newBone.direction.x))) * 180 / Math.PI,
+          twist: newBone.twist * 180 / Math.PI
+        })
+      }
     }
   }
 
