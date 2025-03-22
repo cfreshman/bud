@@ -836,4 +836,29 @@ export class ViewEngine extends EngineUtils {
 
     return { x, y }
   }
+
+  resetCamera() {
+    this.camera.position.set(0, 8, 8)
+    this.controls.target.set(0, 0, 0)
+    this.controls.update()
+    
+    // Update last camera state and save to localStorage
+    this.lastCameraState = {
+      position: this.camera.position.clone(),
+      target: this.controls.target.clone()
+    }
+    
+    localStorage.setItem('greenhouse_camera_state', JSON.stringify({
+      position: {
+        x: this.camera.position.x,
+        y: this.camera.position.y,
+        z: this.camera.position.z
+      },
+      target: {
+        x: this.controls.target.x,
+        y: this.controls.target.y,
+        z: this.controls.target.z
+      }
+    }))
+  }
 } 

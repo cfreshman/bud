@@ -8,7 +8,7 @@ import { removeToken, getToken } from '../services/auth'
 import { carryPlant, uncarryPlant, sharePlant, unsharePlant, getStarCounts, StarCounts } from '../services/api'
 import { loadPlants } from '../services/plants'
 import { WS_URL } from '../config'
-import { Star, CaretLeft } from '@phosphor-icons/react'
+import { Star, CaretLeft, Sphere } from '@phosphor-icons/react'
 
 interface GreenhouseProps {
   plants: Map<number, PlantData>
@@ -340,7 +340,7 @@ export function Greenhouse({
                     rel="noopener noreferrer"
                     className="chat-button"
                   >
-                    bud 🌱 Android
+                    bud 🌱 android
                   </a>
                 </>
               ) : (
@@ -374,9 +374,35 @@ export function Greenhouse({
           style={{ 
             width: '100%', 
             height: '100%',
-            backgroundColor: '#111419'
+            backgroundColor: '#111419',
+            userSelect: 'none'
           }}
         />
+        <button
+          className="chat-button"
+          onClick={() => engineRef.current?.resetCamera()}
+          style={{
+            position: 'fixed',
+            top: '20px',
+            right: '20px',
+            ...(isMobileView ? {
+              width: '40px',
+              height: '40px',
+              borderRadius: '40px',
+            } : {
+              width: '32px',
+              height: '32px',
+              borderRadius: '32px',
+            }),
+            padding: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000
+          }}
+        >
+          <Sphere size={isMobileView ? 20 : 16} />
+        </button>
         <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
           {menuState && (
             <PlotMenu
