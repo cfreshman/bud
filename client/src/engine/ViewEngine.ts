@@ -20,10 +20,12 @@ export class ViewEngine extends EngineUtils {
   private plotPositions: THREE.Vector3[] = [] // Store plot positions for grass distribution
   private bees: THREE.Mesh[] = [] // Store bee meshes
   private lastCameraState: { position: THREE.Vector3, target: THREE.Vector3 } | null = null
+  private isMobileView: boolean = false
 
-  constructor(container: HTMLElement, onSelectPlot: (plotIndex: number | null) => void) {
+  constructor(container: HTMLElement, onSelectPlot: (plotIndex: number | null) => void, isMobileView: boolean = false) {
     super(container)
     this.onSelectPlot = onSelectPlot
+    this.isMobileView = isMobileView
 
     // Create sky and sun before anything else
     this.createSkyAndSun()
@@ -35,8 +37,12 @@ export class ViewEngine extends EngineUtils {
       this.camera.position.set(state.position.x, state.position.y, state.position.z)
       this.controls.target.set(state.target.x, state.target.y, state.target.z)
     } else {
-      // Default camera position
-      this.camera.position.set(0, 8, 8)
+      // Set default camera position based on view mode
+      if (this.isMobileView) {
+        this.camera.position.set(8, 8, 0)
+      } else {
+        this.camera.position.set(0, 8, 8)
+      }
       this.controls.target.set(0, 0, 0)
     }
     this.controls.update()
@@ -838,7 +844,13 @@ export class ViewEngine extends EngineUtils {
   }
 
   resetCamera() {
-    this.camera.position.set(0, 8, 8)
+    if (this.isMobileView) {
+      // Position camera to look down the row (90 degrees rotated)
+      this.camera.position.set(8, 8, 0)
+    } else {
+      // Default desktop position
+      this.camera.position.set(0, 8, 8)
+    }
     this.controls.target.set(0, 0, 0)
     this.controls.update()
     

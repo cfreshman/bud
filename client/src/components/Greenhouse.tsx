@@ -132,7 +132,7 @@ export function Greenhouse({
     }
     
     // Create new engine
-    engineRef.current = new ViewEngine(containerRef.current, handlePlotClick)
+    engineRef.current = new ViewEngine(containerRef.current, handlePlotClick, isMobileView)
 
     // Load plants into plots and find carried plant
     plants.forEach((plantData, plotIndex) => {
